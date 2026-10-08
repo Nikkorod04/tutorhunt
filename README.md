@@ -5,6 +5,12 @@ A mobile app for tutors and parents in Tacloban City, Philippines.
 Tutors manage students, sessions, expenses, payments and parent statements.
 Parents find tutors and post tutoring requests.
 
+## License
+
+The original Tutor Hunt source code and assets are proprietary to Nicanor
+Nikko Villas. See `LICENSE`. Third-party dependencies remain under their
+respective licenses.
+
 ## Stack
 
 | Layer | Choice |
