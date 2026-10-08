@@ -8,7 +8,7 @@
 
 import { create } from 'zustand';
 
-import { limitsFor, type PlanLimits } from '@/constants/plans';
+import { activePlanFor, limitsFor, type PlanLimits } from '@/constants/plans';
 import type { Entitlement, UserProfile } from '@/types';
 
 export type AuthStatus =
@@ -63,7 +63,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
 /** Plan limits for the signed-in tutor, or Free limits when unknown. */
 export function usePlanLimits(): PlanLimits {
-  return useAuthStore((state) => limitsFor(state.entitlement?.plan));
+  return useAuthStore((state) => limitsFor(activePlanFor(state.entitlement)));
 }
 
 export function useRole() {

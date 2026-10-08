@@ -2,7 +2,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
 
-import { Card, EmptyState, Screen, Skeleton, Text } from '@/components/ui';
+import { Card, EmptyState, Screen, Skeleton, Text, useToast } from '@/components/ui';
+import { FormHeader } from '@/components/FormHeader';
 import { SessionForm } from '@/components/SessionForm';
 import { getSession, sessionErrorMessage, updateSession, type SessionInput } from '@/services/sessions.service';
 import { listStudents } from '@/services/students.service';
@@ -15,6 +16,7 @@ export default function EditSessionScreen() {
   const params = useLocalSearchParams<{ id?: string | string[] }>();
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const profile = useAuthStore((state) => state.profile);
+  const { showToast } = useToast();
   const [session, setSession] = useState<Session | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,8 +38,8 @@ export default function EditSessionScreen() {
   async function submit(input: SessionInput) {
     if (!profile || !id) return;
     setBusy(true); setError(null);
-    try { await updateSession(profile.uid, id, input); router.replace({ pathname: '/session-detail', params: { id } } as never); }
-    catch (caught) { setError(sessionErrorMessage(caught)); }
+    try { await updateSession(profile.uid, id, input); showToast('Session updated successfully'); router.replace({ pathname: '/session-detail', params: { id } } as never); }
+    catch (caught) { const message = sessionErrorMessage(caught); setError(message); showToast(message, 'danger'); }
     finally { setBusy(false); }
   }
 
@@ -45,5 +47,5 @@ export default function EditSessionScreen() {
   if (!session) return <Screen scroll><EmptyState icon="alert-circle-outline" title="Session not found" description="It may have been deleted, or the link is out of date." /></Screen>;
   if (session.status === 'rescheduled') return <Screen scroll><EmptyState icon="calendar-outline" title="This session was rescheduled" description="Edit the replacement session instead." /></Screen>;
 
-  return <Screen scroll><View style={{ paddingTop: theme.space[8], gap: theme.space[16] }}><Text token="h1">Edit session</Text>{error ? <Card variant="flat"><Text token="caption" color={theme.colors.dangerText}>{error}</Text></Card> : null}<SessionForm students={students} initial={session} submitLabel="Save changes" busy={busy} onSubmit={submit} /></View></Screen>;
+  return <Screen scroll><View style={{ paddingTop: theme.space[8], gap: theme.space[16] }}><FormHeader eyebrow="SESSION RECORD" title="Edit session" description="Update the lesson details without losing the existing record." icon="create-outline" />{error ? <Card variant="flat"><Text token="caption" color={theme.colors.dangerText}>{error}</Text></Card> : null}<SessionForm students={students} initial={session} submitLabel="Save changes" busy={busy} onSubmit={submit} /></View></Screen>;
 }

@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useMemo, useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Card, Chip, Text, TextField } from '@/components/ui';
 import { useTheme } from '@/theme';
@@ -29,6 +30,7 @@ export function LocationPicker({
   disabled = false,
 }: LocationPickerProps) {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const values = Array.isArray(value) ? value : value ? [value] : [];
@@ -54,6 +56,11 @@ export function LocationPicker({
     setOpen(false);
   }
 
+  function closePicker() {
+    setOpen(false);
+    setSearch('');
+  }
+
   return (
     <View style={{ gap: theme.space[4] }}>
       <Text token="caption" color={theme.colors.textSecondary}>{label}</Text>
@@ -62,7 +69,10 @@ export function LocationPicker({
         accessibilityLabel={label}
         accessibilityState={{ disabled, expanded: open }}
         disabled={disabled}
-        onPress={() => setOpen((current) => !current)}
+        onPress={() => {
+          setSearch('');
+          setOpen(true);
+        }}
         style={({ pressed }) => ({
           minHeight: 48,
           flexDirection: 'row',
@@ -90,39 +100,72 @@ export function LocationPicker({
         </View>
       ) : null}
 
-      {open ? (
-        <Card variant="raised" padded={false} style={{ overflow: 'hidden' }}>
-          <View style={{ padding: theme.space[12], gap: theme.space[8] }}>
-            <TextField label="Search options" value={search} onChangeText={setSearch} placeholder={`Search ${label.toLowerCase()}`} icon="search-outline" />
-            <ScrollView style={{ maxHeight: 280 }} keyboardShouldPersistTaps="always" showsVerticalScrollIndicator>
-              {filteredOptions.length > 0 ? filteredOptions.map((option) => {
-                const selected = values.includes(option);
-                return (
-                  <Pressable
-                    key={option}
-                    onPress={() => select(option)}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected }}
-                    style={({ pressed }) => ({
-                      minHeight: 44,
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      paddingHorizontal: theme.space[8],
-                      borderRadius: theme.radius.sm,
-                      backgroundColor: pressed || selected ? theme.colors.primarySubtle : 'transparent',
-                    })}
-                  >
-                    <Text token="body" color={selected ? theme.colors.primary : theme.colors.textPrimary}>{option}</Text>
-                    {selected ? <Ionicons name="checkmark" size={18} color={theme.colors.primary} /> : null}
+      <Modal
+        visible={open}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={closePicker}
+      >
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: theme.space[16], paddingTop: insets.top + theme.space[12], paddingBottom: insets.bottom + theme.space[12] }}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close picker"
+              onPress={closePicker}
+              style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(15, 23, 42, 0.48)' }}
+            />
+            <Card variant="raised" padded={false} style={{ maxHeight: '88%' }}>
+              <View style={{ padding: theme.space[16], gap: theme.space[12] }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: theme.space[12] }}>
+                  <View style={{ flex: 1, gap: theme.space[4] }}>
+                    <Text token="h3">Choose {label.toLowerCase()}</Text>
+                    {multiple ? <Text token="caption" color={theme.colors.textMuted}>{values.length} selected</Text> : null}
+                  </View>
+                  <Pressable onPress={closePicker} accessibilityRole="button" accessibilityLabel="Close picker" hitSlop={10}>
+                    <Ionicons name="close" size={24} color={theme.colors.textSecondary} />
                   </Pressable>
-                );
-              }) : <Text token="caption" color={theme.colors.textMuted}>No matching options.</Text>}
-            </ScrollView>
-            {multiple ? <Pressable onPress={() => { setOpen(false); setSearch(''); }} accessibilityRole="button" style={{ alignSelf: 'flex-end', padding: theme.space[8] }}><Text token="bodyStrong" color={theme.colors.primary}>Done</Text></Pressable> : null}
+                </View>
+                <TextField label="Search options" value={search} onChangeText={setSearch} placeholder={`Search ${label.toLowerCase()}`} icon="search-outline" />
+                <ScrollView
+                  style={{ maxHeight: 360 }}
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator
+                  nestedScrollEnabled
+                >
+                  {filteredOptions.length > 0 ? filteredOptions.map((option) => {
+                    const selected = values.includes(option);
+                    return (
+                      <Pressable
+                        key={option}
+                        onPress={() => select(option)}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected }}
+                        style={({ pressed }) => ({
+                          minHeight: 48,
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          paddingHorizontal: theme.space[12],
+                          borderRadius: theme.radius.sm,
+                          backgroundColor: pressed || selected ? theme.colors.primarySubtle : 'transparent',
+                        })}
+                      >
+                        <Text token="body" color={selected ? theme.colors.primary : theme.colors.textPrimary}>{option}</Text>
+                        {selected ? <Ionicons name="checkmark" size={18} color={theme.colors.primary} /> : null}
+                      </Pressable>
+                    );
+                  }) : <Text token="caption" color={theme.colors.textMuted}>No matching options.</Text>}
+                </ScrollView>
+                {multiple ? <Pressable onPress={closePicker} accessibilityRole="button" style={{ alignSelf: 'flex-end', padding: theme.space[8] }}><Text token="bodyStrong" color={theme.colors.primary}>Done</Text></Pressable> : null}
+              </View>
+            </Card>
           </View>
-        </Card>
-      ) : null}
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }

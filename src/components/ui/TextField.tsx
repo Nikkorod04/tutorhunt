@@ -12,6 +12,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
 import {
+  Pressable,
   TextInput,
   View,
   type KeyboardTypeOptions,
@@ -36,6 +37,8 @@ export interface TextFieldProps {
   helper?: string;
   /** Non-null puts the field into the error state and shows the message. */
   error?: string | null;
+  /** Hide the inline message when a composite field renders one below its controls. */
+  showErrorMessage?: boolean;
   disabled?: boolean;
   /** Compact single-line control for dense input groups. */
   compact?: boolean;
@@ -62,6 +65,7 @@ export function TextField({
   placeholder,
   helper,
   error = null,
+  showErrorMessage = true,
   disabled = false,
   compact = false,
   multiline = false,
@@ -79,6 +83,7 @@ export function TextField({
   testID,
 }: TextFieldProps) {
   const theme = useTheme();
+  const inputRef = React.useRef<TextInput>(null);
   const [focused, setFocused] = useState(false);
   const shake = useSharedValue(0);
 
@@ -109,6 +114,12 @@ export function TextField({
       {label ? <Text token="caption" color={theme.colors.textSecondary}>{label}</Text> : null}
 
       <Animated.View style={shakeStyle}>
+        <Pressable
+          onPress={disabled ? undefined : () => inputRef.current?.focus()}
+          disabled={disabled}
+          accessible={false}
+          hitSlop={compact ? 6 : undefined}
+        >
         <View
           style={{
             backgroundColor: focused && !error ? theme.colors.primarySubtle : 'transparent',
@@ -138,7 +149,8 @@ export function TextField({
               />
             ) : null}
 
-            <TextInput
+              <TextInput
+                ref={inputRef}
               value={value}
               onChangeText={onChangeText}
               onFocus={() => setFocused(true)}
@@ -161,6 +173,8 @@ export function TextField({
                 compact ? theme.typography.caption : theme.typography.body,
                 {
                   flex: 1,
+                  minHeight: multiline ? 72 : undefined,
+                  alignSelf: multiline ? 'stretch' : undefined,
                   color: disabled ? theme.colors.textHint : theme.colors.textPrimary,
                   paddingVertical: multiline ? 0 : compact ? theme.space[4] : theme.space[12],
                   textAlignVertical: multiline ? 'top' : 'center',
@@ -169,9 +183,10 @@ export function TextField({
             />
           </View>
         </View>
+        </Pressable>
       </Animated.View>
 
-      {error ? (
+      {error && showErrorMessage ? (
         <Text token="caption" color={theme.colors.danger}>
           {error}
         </Text>

@@ -25,6 +25,7 @@ export const TUTOR_MODE_LABELS = {
 
 export const CONTACT_PREFERENCE_LABELS = {
   messenger: 'Messenger',
+  facebook: 'Facebook',
   phone: 'Phone',
   email: 'Email',
 } as const;

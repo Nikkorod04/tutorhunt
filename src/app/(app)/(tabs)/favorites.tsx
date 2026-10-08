@@ -3,7 +3,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Pressable, RefreshControl, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Avatar, Card, Chip, EmptyState, IconButton, Text } from '@/components/ui';
+import { Avatar, Badge, Card, Chip, EmptyState, IconButton, Text, useToast } from '@/components/ui';
+import { RecordListSummary } from '@/components/RecordList';
 import { getMarketplaceTutor, listFavorites, marketplaceErrorMessage, removeFavorite } from '@/services/marketplace.service';
 import { useAuthStore } from '@/stores/authStore';
 import { useTheme } from '@/theme';
@@ -14,6 +15,7 @@ export default function FavoritesScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const account = useAuthStore((state) => state.profile);
+  const { showToast } = useToast();
   const [items, setItems] = useState<TutorFavorite[]>([]);
   const [cursor, setCursor] = useState<Parameters<typeof listFavorites>[1]>(null);
   const [hasMore, setHasMore] = useState(false);
@@ -63,7 +65,8 @@ export default function FavoritesScreen() {
     try {
       await removeFavorite(account.uid, item.tutorUid);
       setItems((current) => current.filter((favorite) => favorite.tutorUid !== item.tutorUid));
-    } catch (caught) { setError(marketplaceErrorMessage(caught)); }
+      showToast('Tutor removed from favorites');
+    } catch (caught) { const message = marketplaceErrorMessage(caught); setError(message); showToast(message, 'danger'); }
     finally { setBusyId(null); }
   }
 
@@ -73,18 +76,25 @@ export default function FavoritesScreen() {
     const rate = item.rateFrom === null ? 'Rate on request' : `From ${formatPesoCompact(item.rateFrom)} / hour`;
     return (
       <Card variant="raised" style={{ marginBottom: theme.space[12] }} padded={false}>
-        <Pressable onPress={() => void openFavorite(item)} style={{ padding: theme.layout.cardPadding }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.space[12] }}>
+        <Pressable onPress={() => void openFavorite(item)} style={{ padding: theme.layout.cardPadding, gap: theme.space[12] }}>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: theme.space[12] }}>
             <Avatar name={item.displayName} imageUrl={item.profilePhotoUrl} size="md" />
             <View style={{ flex: 1, gap: theme.space[4] }}>
               <Text token="h3" numberOfLines={1}>{item.displayName}</Text>
-              <Text token="caption" color={theme.colors.textMuted} numberOfLines={1}>{item.city || 'City not listed'}</Text>
-              <Text token="bodyStrong">{rate}</Text>
+              <Text token="caption" color={theme.colors.textMuted} numberOfLines={1}>{item.city || 'City not listed'} · {item.subjects[0] || 'Tutor'}</Text>
             </View>
             <IconButton icon="heart" tone="danger" accessibilityLabel={`Remove ${item.displayName} from favorites`} disabled={busyId === item.tutorUid} onPress={() => void remove(item)} />
           </View>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.space[8], marginTop: theme.space[12] }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: theme.space[12], padding: theme.space[12], borderRadius: theme.radius.md, backgroundColor: theme.colors.primarySubtle }}>
+            <View style={{ flex: 1, gap: theme.space[2] }}>
+              <Text token="micro" color={theme.colors.primary}>SAVED RATE</Text>
+              <Text token="bodyStrong">{rate}</Text>
+            </View>
+            <Text token="bodyStrong" color={theme.colors.primary}>View profile</Text>
+          </View>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.space[8] }}>
             {item.subjects.slice(0, 3).map((subject) => <Chip key={subject} label={subject} />)}
+            <Badge label="Saved" tone="info" />
           </View>
         </Pressable>
       </Card>
@@ -97,8 +107,8 @@ export default function FavoritesScreen() {
         data={items} keyExtractor={(item) => item.tutorUid} renderItem={renderFavorite} onEndReached={() => void loadMore()} onEndReachedThreshold={0.4}
         keyboardShouldPersistTaps="always" refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void loadFirst(true)} tintColor={theme.colors.primary} />}
         contentContainerStyle={{ paddingHorizontal: theme.layout.screenPadding, paddingTop: insets.top + theme.space[8], paddingBottom: theme.space[32] }}
-        ListHeaderComponent={<View style={{ gap: theme.space[4], marginBottom: theme.space[16] }}><Text token="h1">Favorites</Text><Text token="caption" color={theme.colors.textMuted}>Your saved tutor profiles, kept here even if a listing changes.</Text>{error ? <Card variant="flat" style={{ marginTop: theme.space[8] }}><Text token="caption" color={theme.colors.dangerText}>{error}</Text></Card> : null}</View>}
-        ListEmptyComponent={loading ? <View style={{ paddingVertical: theme.space[48], alignItems: 'center' }}><ActivityIndicator color={theme.colors.primary} /></View> : <EmptyState icon="heart-outline" title="No favorites yet" description="Save a tutor from Find Tutors and they will appear here." />}
+        ListHeaderComponent={<View style={{ gap: theme.space[12], marginBottom: theme.space[16] }}><View style={{ gap: theme.space[4] }}><Text token="h1">Favorites</Text><Text token="caption" color={theme.colors.textMuted}>Keep promising tutor profiles close while you compare options.</Text></View>{items.length > 0 ? <RecordListSummary icon="heart" label="SAVED TUTORS" value={`${items.length}${hasMore ? '+' : ''}`} description="Your saved marketplace profiles." /> : null}{error ? <Card variant="flat"><Text token="caption" color={theme.colors.dangerText}>{error}</Text></Card> : null}</View>}
+        ListEmptyComponent={loading ? <View style={{ paddingVertical: theme.space[48], alignItems: 'center' }}><ActivityIndicator color={theme.colors.primary} /></View> : <Card variant="flat"><EmptyState icon="heart-outline" title="No favorites yet" description="Save a tutor from Find Tutors and they will appear here." /></Card>}
         ListFooterComponent={loadingMore ? <View style={{ paddingVertical: theme.space[16] }}><ActivityIndicator color={theme.colors.primary} /></View> : null}
       />
     </View>

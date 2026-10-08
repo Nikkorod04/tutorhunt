@@ -99,11 +99,11 @@ function TimeField({ label, value, error, onChange }: TimeFieldProps) {
       <Text token="caption" color={theme.colors.textSecondary}>{label}</Text>
       <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: theme.space[8] }}>
         <View style={{ width: 64 }}>
-          <TextField value={hour} onChangeText={handleHourChange} placeholder="4" keyboardType="number-pad" maxLength={2} compact />
+          <TextField value={hour} onChangeText={handleHourChange} placeholder="4" keyboardType="number-pad" maxLength={2} compact error={error} showErrorMessage={false} />
         </View>
         <Text token="h2" color={theme.colors.textSecondary} style={{ paddingBottom: theme.space[8] }}>:</Text>
         <View style={{ width: 64 }}>
-          <TextField value={minute} onChangeText={handleMinuteChange} placeholder="00" keyboardType="number-pad" maxLength={2} compact />
+          <TextField value={minute} onChangeText={handleMinuteChange} placeholder="00" keyboardType="number-pad" maxLength={2} compact error={error} showErrorMessage={false} />
         </View>
         <View style={{ flex: 1, gap: theme.space[4] }}>
           <View style={{ flexDirection: 'row', gap: theme.space[8] }}>

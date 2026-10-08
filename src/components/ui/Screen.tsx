@@ -5,8 +5,9 @@
  * canvas is never pure white (DESIGN_PLAN section 10, rule 1).
  */
 
-import React, { type ReactNode } from 'react';
+import React, { type ReactNode, useEffect, useState } from 'react';
 import {
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -43,6 +44,21 @@ export function Screen({
 }: ScreenProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  useEffect(() => {
+    const showSubscription = Keyboard.addListener('keyboardDidShow', (event) => {
+      setKeyboardHeight(event.endCoordinates.height);
+    });
+    const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
 
   const padding = padded ? { paddingHorizontal: theme.layout.screenPadding } : null;
 
@@ -57,11 +73,12 @@ export function Screen({
         {scroll ? (
           <ScrollView
             style={styles.flex}
+            automaticallyAdjustKeyboardInsets
             contentContainerStyle={[
               padding,
               {
                 paddingTop: header ? 0 : insets.top,
-                paddingBottom: theme.space[32] + insets.bottom,
+                paddingBottom: theme.space[32] + insets.bottom + keyboardHeight,
               },
               contentStyle,
             ]}

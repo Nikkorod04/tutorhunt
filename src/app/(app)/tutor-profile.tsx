@@ -3,8 +3,10 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
 
-import { Avatar, Badge, Button, Card, Chip, EmptyState, IconButton, Screen, SectionHeader, Skeleton, Text } from '@/components/ui';
-import { CONTACT_PREFERENCE_LABELS, TUTOR_MODE_LABELS } from '@/constants/tutorProfile';
+import { Avatar, Badge, Button, Card, Chip, EmptyState, IconButton, Screen, Skeleton, Text } from '@/components/ui';
+import { ContactActionButton } from '@/components/ContactActionButton';
+import { RecordDetailRow, RecordDetailSection } from '@/components/RecordDetail';
+import { TUTOR_MODE_LABELS } from '@/constants/tutorProfile';
 import { getTutorProfile, tutorProfileErrorMessage } from '@/services/tutorProfiles.service';
 import { useAuthStore } from '@/stores/authStore';
 import { useTheme } from '@/theme';
@@ -76,7 +78,7 @@ export default function TutorProfileScreen() {
       <View style={{ paddingTop: theme.space[8], gap: theme.space[16] }}>
         {error ? <Card variant="flat"><Text token="caption" color={theme.colors.dangerText}>{error}</Text></Card> : null}
 
-        <Card variant="raised">
+        <Card variant="raised" style={{ backgroundColor: theme.colors.primarySubtle, borderColor: theme.colors.primaryBorder }}>
           <View style={{ alignItems: 'center', gap: theme.space[12] }}>
             <Avatar name={profile.displayName} imageUrl={profile.profilePhotoUrl} size="lg" ringed={profile.identityVerified} />
             <View style={{ alignItems: 'center', gap: theme.space[4] }}>
@@ -88,14 +90,19 @@ export default function TutorProfileScreen() {
               {profile.credentialsVerified ? <Badge label="Credentials verified" tone="info" /> : null}
               {isOwnProfile && !profile.isVisible ? <Chip variant="status" tone="neutral" label="Hidden" /> : null}
             </View>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: theme.space[8] }}>
+              <Chip label={rateText} variant="status" tone="info" />
+              <Chip label={profile.tutoringModes.map((mode) => TUTOR_MODE_LABELS[mode]).join(' · ')} variant="status" tone="neutral" />
+            </View>
           </View>
         </Card>
 
-        {profile.shortBio ? <Card variant="flat"><Text token="body">{profile.shortBio}</Text></Card> : null}
+        {profile.shortBio ? <Card variant="flat"><View style={{ gap: theme.space[8] }}><Text token="micro" color={theme.colors.textSecondary}>ABOUT THIS TUTOR</Text><Text token="body">{profile.shortBio}</Text></View></Card> : null}
 
-        <Card variant="raised">
-          <SectionHeader title="What I teach" />
+        <RecordDetailSection title="WHAT I TEACH">
+          <Card variant="raised">
           <View style={{ gap: theme.space[12] }}>
+            <Text token="bodyStrong">Subjects</Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.space[8] }}>
               {profile.subjects.map((subject) => <Chip key={subject} label={subject} />)}
             </View>
@@ -104,32 +111,40 @@ export default function TutorProfileScreen() {
               {profile.gradeLevels.map((gradeLevel) => <Chip key={gradeLevel} label={gradeLevel} />)}
             </View>
           </View>
-        </Card>
+          </Card>
+        </RecordDetailSection>
 
-        <Card variant="raised">
-          <SectionHeader title="Details" />
-          <View style={{ gap: theme.space[12] }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.space[8] }}><Ionicons name="cash-outline" size={18} color={theme.colors.primary} /><Text token="body">{rateText}</Text></View>
-            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: theme.space[8] }}><Ionicons name="location-outline" size={18} color={theme.colors.primary} /><Text token="body">{profile.servesAllBarangays ? `${profile.city} · All barangays` : profile.barangaysServed.length > 0 ? `${profile.city} · ${profile.barangaysServed.join(', ')}` : profile.city}</Text></View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.space[8] }}><Ionicons name="desktop-outline" size={18} color={theme.colors.primary} /><Text token="body">{profile.tutoringModes.map((mode) => TUTOR_MODE_LABELS[mode]).join(' · ')}</Text></View>
-          </View>
-        </Card>
-
-        {profile.education || profile.experienceSummary ? (
-          <Card variant="raised">
-            <SectionHeader title="Background" />
-            <View style={{ gap: theme.space[12] }}>
-              {profile.education ? <View style={{ gap: theme.space[4] }}><Text token="caption" color={theme.colors.textMuted}>Education</Text><Text token="body">{profile.education}</Text></View> : null}
-              {profile.experienceSummary ? <View style={{ gap: theme.space[4] }}><Text token="caption" color={theme.colors.textMuted}>Experience</Text><Text token="body">{profile.experienceSummary}</Text></View> : null}
+        <RecordDetailSection title="SERVICE DETAILS">
+          <Card variant="raised" padded={false}>
+            <View style={{ paddingHorizontal: theme.layout.cardPadding }}>
+              <RecordDetailRow icon="cash-outline" label="Hourly rate" value={rateText} tone="info" divider />
+              <RecordDetailRow icon="location-outline" label="Service area" value={profile.servesAllBarangays ? `${profile.city} · All barangays` : profile.barangaysServed.length > 0 ? `${profile.city} · ${profile.barangaysServed.join(', ')}` : profile.city} tone="success" divider />
+              <RecordDetailRow icon="desktop-outline" label="Tutoring modes" value={profile.tutoringModes.map((mode) => TUTOR_MODE_LABELS[mode]).join(' · ')} tone="premium" />
             </View>
           </Card>
+        </RecordDetailSection>
+
+        {profile.education || profile.experienceSummary ? (
+          <RecordDetailSection title="BACKGROUND">
+            <Card variant="raised" padded={false}>
+              <View style={{ paddingHorizontal: theme.layout.cardPadding }}>
+                {profile.education ? <RecordDetailRow icon="school-outline" label="Education" value={profile.education} tone="info" divider={Boolean(profile.experienceSummary)} /> : null}
+                {profile.experienceSummary ? <RecordDetailRow icon="briefcase-outline" label="Experience" value={profile.experienceSummary} tone="neutral" /> : null}
+              </View>
+            </Card>
+          </RecordDetailSection>
         ) : null}
 
         <Card variant="accent">
-          <View style={{ gap: theme.space[8] }}>
-            <Text token="h3">Contact this tutor</Text>
-            <Text token="caption" color={theme.colors.textMuted}>{CONTACT_PREFERENCE_LABELS[profile.contactPreference]}</Text>
-            <Text token="bodyStrong">{profile.contactValue}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: theme.space[12] }}>
+            <View style={{ width: 40, height: 40, borderRadius: theme.radius.md, backgroundColor: theme.colors.surface, alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="chatbubbles-outline" size={21} color={theme.colors.primary} />
+            </View>
+            <View style={{ flex: 1, gap: theme.space[8] }}>
+              <Text token="micro" color={theme.colors.primary}>READY TO CONNECT?</Text>
+              <Text token="h3">Contact this tutor</Text>
+              <ContactActionButton preference={profile.contactPreference} value={profile.contactValue} />
+            </View>
           </View>
         </Card>
 

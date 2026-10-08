@@ -3,7 +3,8 @@ import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
 
 import { ExpenseForm } from '@/components/ExpenseForm';
-import { Card, EmptyState, Screen, Skeleton, Text } from '@/components/ui';
+import { Card, EmptyState, Screen, Skeleton, Text, useToast } from '@/components/ui';
+import { FormHeader } from '@/components/FormHeader';
 import { expenseErrorMessage, getExpense, updateExpense, type ExpenseInput } from '@/services/expenses.service';
 import { listStudents } from '@/services/students.service';
 import { useAuthStore } from '@/stores/authStore';
@@ -15,6 +16,7 @@ export default function EditExpenseScreen() {
   const params = useLocalSearchParams<{ id?: string | string[] }>();
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const profile = useAuthStore((state) => state.profile);
+  const { showToast } = useToast();
   const [expense, setExpense] = useState<Expense | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
@@ -49,9 +51,12 @@ export default function EditExpenseScreen() {
     setError(null);
     try {
       await updateExpense(profile.uid, id, input);
+      showToast('Expense updated successfully');
       router.replace({ pathname: '/expense-detail', params: { id } } as never);
     } catch (caught) {
-      setError(expenseErrorMessage(caught));
+      const message = expenseErrorMessage(caught);
+      setError(message);
+      showToast(message, 'danger');
     } finally {
       setBusy(false);
     }
@@ -63,7 +68,7 @@ export default function EditExpenseScreen() {
   return (
     <Screen scroll>
       <View style={{ paddingTop: theme.space[8], gap: theme.space[16] }}>
-        <Text token="h1">Edit expense</Text>
+        <FormHeader eyebrow="EXPENSE RECORD" title="Edit expense" description="Update the cost, dates and reimbursement details for this expense." icon="create-outline" />
         {error ? <Card variant="flat"><Text token="caption" color={theme.colors.dangerText}>{error}</Text></Card> : null}
         <ExpenseForm students={students} initial={expense} submitLabel="Save changes" busy={busy} onSubmit={submit} />
       </View>

@@ -1,7 +1,7 @@
 /** Public tutor profile. Private student, session, earnings and payment data never belongs here. */
 
 export type TutoringMode = 'face_to_face' | 'online';
-export type ContactPreference = 'messenger' | 'phone' | 'email';
+export type ContactPreference = 'messenger' | 'facebook' | 'phone' | 'email';
 
 export interface TutorProfile {
   uid: string;

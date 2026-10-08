@@ -36,6 +36,8 @@ yarn-error.*
 
 # local agent workspace metadata
 .workbuddy-ai/
+.firebase/
+.codex-remote-attachments/
 
 # typescript
 *.tsbuildinfo

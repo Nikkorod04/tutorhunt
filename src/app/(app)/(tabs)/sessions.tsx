@@ -1,9 +1,9 @@
-import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, RefreshControl, ScrollView, View } from 'react-native';
 
-import { Button, Card, Chip, EmptyState, ListRow, Screen, SessionStatusChip, Text } from '@/components/ui';
+import { Button, Card, Chip, EmptyState, Screen, SessionStatusChip, Text } from '@/components/ui';
+import { RecordListCard, RecordListSummary } from '@/components/RecordList';
 import { getStudent } from '@/services/students.service';
 import { listSessions, SESSION_PAGE_SIZE, sessionErrorMessage } from '@/services/sessions.service';
 import { useAuthStore } from '@/stores/authStore';
@@ -85,14 +85,26 @@ export default function SessionsScreen() {
   }
 
   const header = (
-    <View style={{ paddingHorizontal: theme.layout.screenPadding, paddingTop: theme.space[8] }}>
+    <View style={{ paddingHorizontal: theme.layout.screenPadding, paddingTop: theme.space[8], gap: theme.space[4] }}>
       <Text token="h1">{studentId ? 'Student sessions' : 'Sessions'}</Text>
+      <Text token="caption" color={theme.colors.textMuted}>Review schedules, attendance, fees and completed tutoring work.</Text>
     </View>
   );
 
   return (
     <Screen header={header} padded={false}>
       <View style={{ flex: 1 }}>
+        {store.items.length > 0 ? (
+          <View style={{ paddingHorizontal: theme.layout.screenPadding, paddingTop: theme.space[12] }}>
+            <RecordListSummary
+              icon="calendar-outline"
+              label="SESSION HISTORY"
+              value={`${store.items.length} loaded`}
+              description={studentId ? 'Sessions recorded for this student.' : 'Your most recent tutoring sessions.'}
+            />
+          </View>
+        ) : null}
+
         <ScrollView
           horizontal
           style={{ flexGrow: 0, flexShrink: 0 }}
@@ -118,16 +130,22 @@ export default function SessionsScreen() {
           onEndReachedThreshold={0.4}
           onEndReached={() => void loadMore()}
           renderItem={({ item }) => (
-            <Card variant="raised" padded={false}>
-              <ListRow
-                title={item.subject}
-                subtitle={`${studentNames[item.studentId] ?? 'Student'} · ${formatDisplayDateTime(item.startsAt)}`}
-                leading={<Ionicons name="book-outline" size={20} color={theme.colors.primary} />}
-                trailing={<View style={{ alignItems: 'flex-end', gap: theme.space[4] }}><Text token="caption" tabular>{formatPesoCompact(item.sessionFee)}</Text><SessionStatusChip status={item.status} /></View>}
-                showChevron
-                onPress={() => router.push({ pathname: '/session-detail', params: { id: item.id } } as never)}
-              />
-            </Card>
+            <RecordListCard
+              icon="book-outline"
+              iconTone={item.status === 'completed' ? 'success' : item.status === 'scheduled' ? 'info' : 'neutral'}
+              title={item.subject}
+              subtitle={`${studentNames[item.studentId] ?? 'Student'} · ${formatDisplayDateTime(item.startsAt)}`}
+              amount={formatPesoCompact(item.sessionFee)}
+              status={<SessionStatusChip status={item.status} />}
+              tags={
+                <>
+                  <Chip variant="status" tone="neutral" label={`${item.durationMinutes} min`} icon="time-outline" />
+                  <Chip variant="status" tone="info" label={item.topicCategory.replaceAll('_', ' ')} icon="bookmark-outline" />
+                </>
+              }
+              actionLabel="View session"
+              onPress={() => router.push({ pathname: '/session-detail', params: { id: item.id } } as never)}
+            />
           )}
           ListEmptyComponent={store.loading ? <View style={{ paddingTop: theme.space[48], alignItems: 'center' }}><ActivityIndicator color={theme.colors.primary} /></View> : <Card variant="flat"><EmptyState icon="calendar-outline" title="No sessions recorded yet" description={studentId ? 'Add the first session for this student.' : 'Record a tutoring session to start building history.'} action={<Button label="Add session" onPress={() => router.push(`/session-new${studentId ? `?studentId=${studentId}` : ''}` as never)} />}/></Card>}
           ListFooterComponent={store.loadingMore ? <View style={{ paddingVertical: theme.space[16], alignItems: 'center' }}><ActivityIndicator color={theme.colors.primary} /></View> : null}

@@ -9,18 +9,19 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { Image, Pressable, View, type ImageSourcePropType } from 'react-native';
 
-import { Button, Screen, Text, type IconName } from '@/components/ui';
+import { Button, Screen, Text } from '@/components/ui';
 import { authErrorMessage, completeProfile } from '@/services/auth.service';
 import { getFirebaseAuth } from '@/services/firebase';
 import { useAuthStore } from '@/stores/authStore';
 import { useTheme } from '@/theme';
+import { ILLUSTRATIONS } from '@/constants/illustrations';
 import type { Role } from '@/types';
 
 interface Option {
   role: Exclude<Role, 'admin'>;
-  icon: IconName;
+  image: ImageSourcePropType;
   title: string;
   description: string;
 }
@@ -28,13 +29,13 @@ interface Option {
 const OPTIONS: Option[] = [
   {
     role: 'tutor',
-    icon: 'school-outline',
+    image: ILLUSTRATIONS.tutor,
     title: 'I am a tutor',
     description: 'Track students, sessions, expenses and statements.',
   },
   {
     role: 'parent',
-    icon: 'people-outline',
+    image: ILLUSTRATIONS.parent,
     title: 'I am a parent',
     description: 'Find tutors and post tutoring requests.',
   },
@@ -81,6 +82,16 @@ export default function RoleSelectionScreen() {
   return (
     <Screen scroll>
       <View style={{ gap: theme.space[24], paddingTop: theme.space[48] }}>
+        <View style={{ alignItems: 'center', gap: theme.space[12] }}>
+          <Image
+            source={ILLUSTRATIONS.tutoring}
+            style={{ width: 176, height: 176 }}
+            resizeMode="contain"
+            accessibilityLabel="Tutoring illustration"
+            accessibilityIgnoresInvertColors
+          />
+        </View>
+
         <View style={{ gap: theme.space[4] }}>
           <Text token="h1">How will you use Tutor Hunt?</Text>
           <Text token="body" color={theme.colors.textMuted}>
@@ -113,18 +124,19 @@ export default function RoleSelectionScreen() {
               >
                 <View
                   style={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: theme.radius.md,
-                    backgroundColor: isSelected ? theme.colors.primary : theme.colors.surfaceSunken,
+                    width: 88,
+                    height: 88,
+                    borderRadius: theme.radius.lg,
+                    backgroundColor: theme.colors.surfaceSunken,
                     alignItems: 'center',
                     justifyContent: 'center',
                   }}
                 >
-                  <Ionicons
-                    name={option.icon}
-                    size={24}
-                    color={isSelected ? theme.colors.textOnPrimary : theme.colors.textSecondary}
+                  <Image
+                    source={option.image}
+                    style={{ width: 80, height: 80 }}
+                    resizeMode="contain"
+                    accessibilityIgnoresInvertColors
                   />
                 </View>
 

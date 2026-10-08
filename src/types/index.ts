@@ -9,3 +9,4 @@ export * from './statement';
 export * from './tutorProfile';
 export * from './parentProfile';
 export * from './favorite';
+export * from './parentPost';

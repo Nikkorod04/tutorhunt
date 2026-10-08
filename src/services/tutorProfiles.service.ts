@@ -14,6 +14,7 @@ import type {
   TutoringMode,
 } from '@/types';
 import { locationForCity, type ServiceProvince } from '@/constants/locations';
+import { contactValidationError, normalizeContactValue } from '@/utils/contact';
 import { getDb } from './firebase';
 
 export interface TutorProfileInput {
@@ -91,7 +92,7 @@ function mapTutorProfile(uid: string, data: DocumentData): TutorProfile {
     maxRate: typeof data.maxRate === 'number' ? data.maxRate : null,
     education: typeof data.education === 'string' ? data.education : '',
     experienceSummary: typeof data.experienceSummary === 'string' ? data.experienceSummary : '',
-    contactPreference: data.contactPreference === 'phone' || data.contactPreference === 'email'
+    contactPreference: data.contactPreference === 'facebook' || data.contactPreference === 'phone' || data.contactPreference === 'email'
       ? data.contactPreference
       : 'messenger',
     contactValue: typeof data.contactValue === 'string' ? data.contactValue : '',
@@ -111,6 +112,9 @@ export async function getTutorProfile(uid: string): Promise<TutorProfile | null>
 }
 
 export async function upsertTutorProfile(uid: string, input: TutorProfileInput): Promise<TutorProfile> {
+  const contactError = contactValidationError(input.contactPreference, input.contactValue);
+  if (contactError) throw new Error(contactError);
+
   const ref = profileRef(uid);
   const current = await getDoc(ref);
   const currentData = current.exists() ? current.data() : null;
@@ -130,6 +134,7 @@ export async function upsertTutorProfile(uid: string, input: TutorProfileInput):
   await setDoc(ref, {
     uid,
     ...input,
+    contactValue: normalizeContactValue(input.contactPreference, input.contactValue),
     barangaysServed: persistedBarangays,
     createdAt,
     updatedAt: serverTimestamp(),

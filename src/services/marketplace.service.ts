@@ -77,7 +77,7 @@ function mapTutorProfile(uid: string, data: DocumentData): TutorProfile {
     maxRate: typeof data.maxRate === 'number' ? data.maxRate : null,
     education: typeof data.education === 'string' ? data.education : '',
     experienceSummary: typeof data.experienceSummary === 'string' ? data.experienceSummary : '',
-    contactPreference: data.contactPreference === 'phone' || data.contactPreference === 'email' ? data.contactPreference : 'messenger',
+    contactPreference: data.contactPreference === 'facebook' || data.contactPreference === 'phone' || data.contactPreference === 'email' ? data.contactPreference : 'messenger',
     contactValue: typeof data.contactValue === 'string' ? data.contactValue : '',
     rating: typeof data.rating === 'number' ? data.rating : 0,
     reviewCount: typeof data.reviewCount === 'number' ? data.reviewCount : 0,

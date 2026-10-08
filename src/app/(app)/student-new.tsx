@@ -10,7 +10,9 @@ import { router } from 'expo-router';
 import React, { useState } from 'react';
 import { View } from 'react-native';
 
-import { Card, Screen, Text } from '@/components/ui';
+import { Button, Card, Screen, Text, useToast } from '@/components/ui';
+import { FormHeader } from '@/components/FormHeader';
+import { activePlanFor } from '@/constants/plans';
 import { StudentForm } from '@/components/StudentForm';
 import {
   createStudent,
@@ -27,6 +29,7 @@ export default function AddStudentScreen() {
   const profile = useAuthStore((state) => state.profile);
   const entitlement = useAuthStore((state) => state.entitlement);
   const upsert = useStudentStore((state) => state.upsert);
+  const { showToast } = useToast();
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,12 +43,15 @@ export default function AddStudentScreen() {
     setLimitHit(false);
 
     try {
-      const created = await createStudent(profile.uid, entitlement?.plan ?? 'free', input);
+      const created = await createStudent(profile.uid, activePlanFor(entitlement), input);
       const { customAvatarLocalUri: _uri, customAvatarMimeType: _mime, ...persisted } = input;
       upsert({ ...persisted, id: created.id, customAvatarUrl: created.customAvatarUrl, status: 'active', createdAt: new Date(), updatedAt: new Date() });
+      showToast('Student added successfully');
       router.back();
     } catch (caught) {
-      setError(studentErrorMessage(caught));
+      const message = studentErrorMessage(caught);
+      setError(message);
+      showToast(message, 'danger');
       setLimitHit(caught instanceof StudentLimitError);
     } finally {
       setBusy(false);
@@ -55,7 +61,7 @@ export default function AddStudentScreen() {
   return (
     <Screen scroll>
       <View style={{ paddingTop: theme.space[8], gap: theme.space[16] }}>
-        <Text token="h1">Add student</Text>
+        <FormHeader eyebrow="STUDENT RECORD" title="Add student" description="Keep the details you need for sessions, rates and statements in one place." icon="person-add-outline" />
 
         {error ? (
           <Card variant={limitHit ? 'premium' : 'flat'}>
@@ -73,10 +79,13 @@ export default function AddStudentScreen() {
                   {error}
                 </Text>
                 {limitHit ? (
-                  <Text token="caption" color={theme.colors.textMuted}>
-                    Upgrade to Pro for unlimited students. Nothing you have already recorded is
-                    ever deleted.
-                  </Text>
+                  <View style={{ gap: theme.space[8] }}>
+                    <Text token="caption" color={theme.colors.textMuted}>
+                      Upgrade to Pro for unlimited students. Nothing you have already recorded is
+                      ever deleted.
+                    </Text>
+                    <Button label="View Pro plans" size="sm" variant="accent" onPress={() => router.push('/upgrade' as never)} />
+                  </View>
                 ) : null}
               </View>
             </View>

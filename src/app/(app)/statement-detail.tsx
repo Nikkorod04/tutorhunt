@@ -1,11 +1,11 @@
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, View } from 'react-native';
 
-import { Button, Card, EmptyState, ListRow, Screen, Skeleton, Text } from '@/components/ui';
+import { Badge, Button, Card, EmptyState, Screen, Skeleton, Text, useToast } from '@/components/ui';
+import { RecordDetailHeader, RecordDetailMetrics, RecordDetailRow, RecordDetailSection } from '@/components/RecordDetail';
 import { getExpense } from '@/services/expenses.service';
 import { getSession } from '@/services/sessions.service';
 import { getStudent } from '@/services/students.service';
@@ -23,6 +23,7 @@ export default function StatementDetailScreen() {
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const initialPdfUri = Array.isArray(params.pdfUri) ? params.pdfUri[0] : params.pdfUri;
   const profile = useAuthStore((state) => state.profile);
+  const { showToast } = useToast();
   const [statement, setStatement] = useState<Statement | null>(null);
   const [student, setStudent] = useState<Student | null>(null);
   const [loading, setLoading] = useState(true);
@@ -31,19 +32,13 @@ export default function StatementDetailScreen() {
   const [pdfUri, setPdfUri] = useState(initialPdfUri);
 
   const load = useCallback(async () => {
-    if (!profile || !id) {
-      setLoading(false);
-      return;
-    }
+    if (!profile || !id) { setLoading(false); return; }
     try {
       const found = await getStatement(profile.uid, id);
       setStatement(found);
       if (found) setStudent(await getStudent(profile.uid, found.studentId));
-    } catch (caught) {
-      setError(statementErrorMessage(caught));
-    } finally {
-      setLoading(false);
-    }
+    } catch (caught) { setError(statementErrorMessage(caught)); }
+    finally { setLoading(false); }
   }, [profile, id]);
 
   useEffect(() => { void load(); }, [load]);
@@ -80,37 +75,25 @@ export default function StatementDetailScreen() {
       });
       const pdf = await Print.printToFileAsync({ html });
       setPdfUri(pdf.uri);
-    } catch (caught) {
-      setError(statementErrorMessage(caught));
-    } finally {
-      setBusy(false);
-    }
-  }, [profile, statement, student]);
+      showToast('Statement PDF regenerated');
+    } catch (caught) { const message = statementErrorMessage(caught); setError(message); showToast(message, 'danger'); }
+    finally { setBusy(false); }
+  }, [profile, showToast, statement, student]);
 
   useEffect(() => {
     if (!initialPdfUri && statement && !pdfUri) void regeneratePdf();
   }, [initialPdfUri, statement, pdfUri, regeneratePdf]);
 
   async function previewPdf() {
-    if (!pdfUri) {
-      await regeneratePdf();
-      return;
-    }
+    if (!pdfUri) { await regeneratePdf(); return; }
     setBusy(true);
-    try {
-      await Print.printAsync({ uri: pdfUri });
-    } catch (caught) {
-      setError(statementErrorMessage(caught));
-    } finally {
-      setBusy(false);
-    }
+    try { await Print.printAsync({ uri: pdfUri }); }
+    catch (caught) { const message = statementErrorMessage(caught); setError(message); showToast(message, 'danger'); }
+    finally { setBusy(false); }
   }
 
   async function sharePdf() {
-    if (!pdfUri) {
-      await regeneratePdf();
-      return;
-    }
+    if (!pdfUri) { await regeneratePdf(); return; }
     setBusy(true);
     try {
       if (!(await Sharing.isAvailableAsync())) {
@@ -122,89 +105,116 @@ export default function StatementDetailScreen() {
         dialogTitle: statement ? `Share ${statement.statementNumber}` : 'Share statement',
         UTI: 'com.adobe.pdf',
       });
-    } catch (caught) {
-      setError(statementErrorMessage(caught));
-    } finally {
-      setBusy(false);
-    }
+    } catch (caught) { const message = statementErrorMessage(caught); setError(message); showToast(message, 'danger'); }
+    finally { setBusy(false); }
   }
 
   if (loading) {
-    return <Screen scroll><View style={{ paddingTop: theme.space[16], gap: theme.space[16] }}><Skeleton width="60%" height={32} /><Skeleton variant="card" /><Skeleton variant="card" /></View></Screen>;
+    return (
+      <Screen scroll>
+        <View style={{ paddingTop: theme.space[8], gap: theme.space[16] }}>
+          <Skeleton width="40%" />
+          <Skeleton variant="card" height={154} />
+          <Skeleton variant="card" height={210} />
+        </View>
+      </Screen>
+    );
   }
 
   if (!statement) {
-    return <Screen scroll><EmptyState icon="alert-circle-outline" title="Statement not found" description={error ?? 'It may have been deleted, or the link is out of date.'} /></Screen>;
+    return (
+      <Screen scroll>
+        <View style={{ paddingTop: theme.space[32] }}>
+          <EmptyState icon="alert-circle-outline" title="Statement not found" description={error ?? 'It may have been deleted, or the link is out of date.'} />
+        </View>
+      </Screen>
+    );
   }
 
   return (
     <Screen scroll>
-      <View style={{ paddingTop: theme.space[8], gap: theme.space[24] }}>
-        <View style={{ gap: theme.space[4] }}>
-          <Text token="h1">{statement.statementNumber}</Text>
-          <Text token="caption" color={theme.colors.textMuted}>
-            {student?.nickname ?? 'Student'} · Generated {formatDisplayDate(statement.generatedAt)}{statement.status === 'voided' ? ' · Voided' : ''}
-          </Text>
-        </View>
+      <View style={{ paddingTop: theme.space[8], gap: theme.space[20] }}>
+        <RecordDetailHeader
+          eyebrow="STATEMENT RECORD"
+          title={statement.statementNumber}
+          subtitle={`${student?.nickname ?? 'Student'} · Generated ${formatDisplayDate(statement.generatedAt)}`}
+          icon="document-text-outline"
+          status={<Badge label={statement.status === 'active' ? 'Active' : 'Voided'} tone={statement.status === 'active' ? 'success' : 'neutral'} />}
+          onBack={() => router.back()}
+        />
 
-        {error ? <Card variant="flat"><Text token="caption" color={theme.colors.dangerText}>{error}</Text></Card> : null}
+        {error ? <Card variant="accent"><Text token="caption" color={theme.colors.warningText}>{error}</Text></Card> : null}
 
         {statement.status === 'voided' ? (
-          <Card variant="flat">
+          <Card variant="accent">
             <View style={{ gap: theme.space[12] }}>
-              <Text token="caption" color={theme.colors.textSecondary}>
-                This statement was voided and replaced. It is kept for your records and cannot be reissued again.
-              </Text>
-              {statement.replacementStatementId ? (
-                <Button
-                  label="View replacement statement"
-                  icon="arrow-forward-outline"
-                  variant="secondary"
-                  onPress={() => router.push({ pathname: '/statement-detail', params: { id: statement.replacementStatementId! } } as never)}
-                  fullWidth
-                />
-              ) : null}
+              <View style={{ gap: theme.space[4] }}>
+                <Text token="h3">This statement was voided</Text>
+                <Text token="caption" color={theme.colors.warningText}>It was replaced and is kept for your records.</Text>
+              </View>
+              {statement.replacementStatementId ? <Button label="View replacement statement" icon="arrow-forward-outline" variant="secondary" onPress={() => router.push({ pathname: '/statement-detail', params: { id: statement.replacementStatementId! } } as never)} fullWidth /> : null}
             </View>
           </Card>
         ) : null}
 
-        <Card variant="raised">
+        <Card variant="raised" style={{ backgroundColor: theme.colors.primarySubtle, borderColor: theme.colors.primaryBorder }}>
           <View style={{ gap: theme.space[4] }}>
-            <ListRow title="Statement period" subtitle={`${formatDisplayDate(statement.periodStart)} – ${formatDisplayDate(statement.periodEnd)}`} leading={<Ionicons name="calendar-outline" size={18} color={theme.colors.primary} />} divider />
-            <ListRow title="Sessions" subtitle={`${statement.sessionIds.length} included`} leading={<Ionicons name="book-outline" size={18} color={theme.colors.textMuted} />} trailing={<Text token="caption" tabular>{formatPeso(statement.sessionSubtotal)}</Text>} divider />
-            <ListRow title="Reimbursable expenses" subtitle={`${statement.expenseIds.length} included`} leading={<Ionicons name="wallet-outline" size={18} color={theme.colors.textMuted} />} trailing={<Text token="caption" tabular>{formatPeso(statement.expenseSubtotal)}</Text>} divider />
-            <ListRow title="Total due" subtitle={`${formatPeso(statement.amountPaidAtIssue)} paid at issue`} leading={<Ionicons name="cash-outline" size={18} color={theme.colors.primary} />} trailing={<Text token="bodyStrong" tabular>{formatPeso(statement.totalDue)}</Text>} />
+            <Text token="micro" color={theme.colors.primary}>TOTAL DUE</Text>
+            <Text token="display" tabular>{formatPeso(statement.totalDue)}</Text>
+            <Text token="caption" color={theme.colors.textSecondary}>Generated for the selected statement period.</Text>
           </View>
         </Card>
 
-        {statement.notes ? <Card variant="flat"><Text token="caption" color={theme.colors.textMuted}>{statement.notes}</Text></Card> : null}
+        <RecordDetailMetrics
+          metrics={[
+            { label: 'SESSION SUBTOTAL', value: formatPeso(statement.sessionSubtotal) },
+            { label: 'EXPENSE SUBTOTAL', value: formatPeso(statement.expenseSubtotal), tone: 'info' },
+          ]}
+        />
 
-        {pdfUri ? (
-          <View style={{ gap: theme.space[12] }}>
-            <Button label="Preview PDF" icon="eye-outline" variant="secondary" onPress={() => void previewPdf()} loading={busy} fullWidth />
-            <Button label="Share PDF" icon="share-outline" onPress={() => void sharePdf()} loading={busy} fullWidth />
-          </View>
-        ) : (
-          <Card variant="flat">
-            <View style={{ gap: theme.space[12] }}>
-              <Text token="caption" color={theme.colors.textMuted}>
-                {busy ? 'Rebuilding the PDF from the saved statement data…' : 'The PDF is not currently cached. Rebuild it locally from the saved statement data.'}
-              </Text>
-              {!busy ? <Button label="Regenerate PDF" icon="refresh-outline" variant="secondary" onPress={() => void regeneratePdf()} fullWidth /> : null}
-            </View>
+        <RecordDetailSection title="STATEMENT DETAILS">
+          <Card variant="flat" padded={false}>
+            <RecordDetailRow icon="calendar-outline" label="STATEMENT PERIOD" value={`${formatDisplayDate(statement.periodStart)} – ${formatDisplayDate(statement.periodEnd)}`} tone="info" divider />
+            <RecordDetailRow icon="book-outline" label="SESSIONS" value={`${statement.sessionIds.length} included`} tone="neutral" divider />
+            <RecordDetailRow icon="wallet-outline" label="REIMBURSABLE EXPENSES" value={`${statement.expenseIds.length} included`} tone="info" />
           </Card>
-        )}
+        </RecordDetailSection>
 
-        {statement.status === 'active' ? (
-          <Button
-            label="Reissue statement"
-            icon="create-outline"
-            variant="secondary"
-            onPress={() => router.push({ pathname: '/statement-new', params: { studentId: statement.studentId, reissueId: statement.id } } as never)}
-            fullWidth
-          />
+        {statement.notes ? (
+          <RecordDetailSection title="NOTES">
+            <Card variant="flat"><Text token="body">{statement.notes}</Text></Card>
+          </RecordDetailSection>
         ) : null}
-        <Button label="Generate another statement" icon="add" variant="ghost" onPress={() => router.push({ pathname: '/statement-new', params: { studentId: statement.studentId } } as never)} fullWidth />
+
+        <RecordDetailSection title="PDF STATEMENT">
+          {pdfUri ? (
+            <Card variant="premium">
+              <View style={{ gap: theme.space[12] }}>
+                <View style={{ gap: theme.space[4] }}>
+                  <Text token="h3">Your PDF is ready</Text>
+                  <Text token="caption" color={theme.colors.textMuted}>Preview it or share it with the parent from this device.</Text>
+                </View>
+                <Button label="Preview PDF" icon="eye-outline" variant="secondary" onPress={() => void previewPdf()} loading={busy} fullWidth />
+                <Button label="Share PDF" icon="share-outline" onPress={() => void sharePdf()} loading={busy} fullWidth />
+              </View>
+            </Card>
+          ) : (
+            <Card variant="flat">
+              <View style={{ gap: theme.space[12] }}>
+                <Text token="caption" color={theme.colors.textMuted}>{busy ? 'Rebuilding the PDF from the saved statement data…' : 'The PDF is not currently cached. Rebuild it locally from the saved statement data.'}</Text>
+                {!busy ? <Button label="Regenerate PDF" icon="refresh-outline" variant="secondary" onPress={() => void regeneratePdf()} fullWidth /> : null}
+              </View>
+            </Card>
+          )}
+        </RecordDetailSection>
+
+        <Card variant="flat">
+          <View style={{ gap: theme.space[12] }}>
+            <Text token="h3">Statement actions</Text>
+            {statement.status === 'active' ? <Button label="Reissue statement" icon="create-outline" variant="secondary" onPress={() => router.push({ pathname: '/statement-new', params: { studentId: statement.studentId, reissueId: statement.id } } as never)} fullWidth /> : null}
+            <Button label="Generate another statement" icon="add" variant="ghost" onPress={() => router.push({ pathname: '/statement-new', params: { studentId: statement.studentId } } as never)} fullWidth />
+          </View>
+        </Card>
       </View>
     </Screen>
   );

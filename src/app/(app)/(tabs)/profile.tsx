@@ -24,7 +24,7 @@ import {
   SectionHeader,
   Text,
 } from '@/components/ui';
-import { limitsFor } from '@/constants/plans';
+import { activePlanFor, limitsFor } from '@/constants/plans';
 import { ensureEntitlement } from '@/services/entitlements.service';
 import { signOut } from '@/services/auth.service';
 import { useAuthStore } from '@/stores/authStore';
@@ -37,7 +37,8 @@ export default function ProfileScreen() {
   const setEntitlement = useAuthStore((state) => state.setEntitlement);
   const [busy, setBusy] = useState(false);
 
-  const limits = limitsFor(entitlement?.plan);
+  const activePlan = activePlanFor(entitlement);
+  const limits = limitsFor(activePlan);
   const isUnlimited = !Number.isFinite(limits.monthlyPdfs);
   const used = entitlement?.pdfStatementsThisMonth ?? 0;
   const quotaRatio = isUnlimited ? 0 : Math.min(1, used / limits.monthlyPdfs);
@@ -65,21 +66,45 @@ export default function ProfileScreen() {
   return (
     <Screen scroll padded>
       <View style={{ paddingTop: theme.space[8], gap: theme.space[24] }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.space[12] }}>
-          <Avatar name={profile?.displayName ?? ''} size="lg" />
-          <View style={{ flex: 1, gap: theme.space[4] }}>
-            <Text token="h2" numberOfLines={1}>
-              {profile?.displayName || 'Your account'}
-            </Text>
-            <Text token="caption" color={theme.colors.textMuted} numberOfLines={1}>
-              {profile?.email ?? ''}
-            </Text>
-            <View style={{ flexDirection: 'row', gap: theme.space[8] }}>
-              {profile?.role ? <Chip variant="status" tone="info" label={profile.role} /> : null}
-              <PlanBadge plan={entitlement?.plan ?? 'free'} />
+        <Card variant="raised" style={{ backgroundColor: theme.colors.primarySubtle, borderColor: theme.colors.primaryBorder }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.space[12] }}>
+            <Avatar name={profile?.displayName ?? ''} size="lg" />
+            <View style={{ flex: 1, gap: theme.space[4] }}>
+              <Text token="h2" numberOfLines={1}>
+                {profile?.displayName || 'Your account'}
+              </Text>
+              <Text token="caption" color={theme.colors.textMuted} numberOfLines={1}>
+                {profile?.email ?? ''}
+              </Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.space[8] }}>
+                {profile?.role ? <Chip variant="status" tone="info" label={profile.role} /> : null}
+                <PlanBadge plan={activePlan} />
+              </View>
             </View>
           </View>
-        </View>
+        </Card>
+
+        {profile?.role === 'tutor' ? (
+          <Card variant={activePlan === 'pro' ? 'raised' : 'premium'}>
+            <View style={{ gap: theme.space[12] }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.space[8] }}>
+                <Ionicons name="star" size={20} color={theme.colors.premium} />
+                <Text token="h3">{activePlan === 'pro' ? 'Pro plan' : 'Unlock Tutor Hunt Pro'}</Text>
+              </View>
+              <Text token="caption" color={theme.colors.textMuted}>
+                {activePlan === 'pro'
+                  ? 'Manage your Pro access and view the included features.'
+                  : 'Unlimited students, recurring sessions, statements and more.'}
+              </Text>
+              <Button
+                label={activePlan === 'pro' ? 'View Pro details' : 'Upgrade to Pro'}
+                variant={activePlan === 'pro' ? 'secondary' : 'accent'}
+                onPress={() => router.push('/upgrade' as never)}
+                fullWidth
+              />
+            </View>
+          </Card>
+        ) : null}
 
         {profile?.role === 'tutor' ? (
           <Card variant="raised">
@@ -207,6 +232,27 @@ export default function ProfileScreen() {
             ) : null}
             {profile?.role === 'tutor' ? (
               <>
+                <ListRow
+                  title="Recurring sessions"
+                  subtitle="Create and manage weekly session series"
+                  leading={
+                    <View
+                      style={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: theme.radius.md,
+                        backgroundColor: theme.colors.primarySubtle,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <Ionicons name="repeat-outline" size={18} color={theme.colors.primary} />
+                    </View>
+                  }
+                  divider
+                  showChevron
+                  onPress={() => router.push('/recurring' as never)}
+                />
                 <ListRow
                   title="Public profile"
                   subtitle="Set what parents can see about you"

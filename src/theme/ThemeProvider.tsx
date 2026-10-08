@@ -18,7 +18,7 @@ import {
   useFonts,
 } from '@expo-google-fonts/inter';
 import React, { createContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { AccessibilityInfo } from 'react-native';
+import { AccessibilityInfo, Platform } from 'react-native';
 
 import { colors, tones, type Tone, type ToneSet } from './colors';
 import { elevation } from './elevation';
@@ -100,7 +100,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     [reduceMotion],
   );
 
-  if (!fontsLoaded) return null;
+  // A failed web font request must not leave the whole hosted SPA blank.
+  // Native keeps the original font-loading gate, while web can safely use
+  // the browser fallback until the bundled font is available.
+  if (!fontsLoaded && Platform.OS !== 'web') return null;
 
   return <ThemeContext.Provider value={theme}>{children}</ThemeContext.Provider>;
 }

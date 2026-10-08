@@ -17,11 +17,11 @@ import {
   Card,
   Chip,
   EmptyState,
-  ListRow,
   Screen,
   Text,
 } from '@/components/ui';
-import { limitsFor } from '@/constants/plans';
+import { RecordListCard, RecordListSummary } from '@/components/RecordList';
+import { activePlanFor, limitsFor } from '@/constants/plans';
 import {
   countActiveStudents,
   listStudents,
@@ -65,7 +65,7 @@ export default function StudentsScreen() {
   const theme = useTheme();
   const profile = useAuthStore((state) => state.profile);
   const entitlement = useAuthStore((state) => state.entitlement);
-  const limits = limitsFor(entitlement?.plan);
+  const limits = limitsFor(activePlanFor(entitlement));
 
   const {
     items,
@@ -131,22 +131,9 @@ export default function StudentsScreen() {
 
   const header = (
     <View style={{ paddingHorizontal: theme.layout.screenPadding, paddingTop: theme.space[8] }}>
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: theme.space[12],
-        }}
-      >
+      <View style={{ gap: theme.space[4] }}>
         <Text token="h1">Students</Text>
-        {activeCount !== null ? (
-          <Text token="caption" color={theme.colors.textMuted} tabular>
-            {Number.isFinite(limits.maxActiveStudents)
-              ? `${activeCount} of ${limits.maxActiveStudents} active`
-              : `${activeCount} active`}
-          </Text>
-        ) : null}
+        <Text token="caption" color={theme.colors.textMuted}>Manage your tutees, rates and tutoring activity.</Text>
       </View>
     </View>
   );
@@ -154,6 +141,17 @@ export default function StudentsScreen() {
   return (
     <Screen header={header} padded={false}>
       <View style={{ flex: 1 }}>
+        {activeCount !== null ? (
+          <View style={{ paddingHorizontal: theme.layout.screenPadding, paddingTop: theme.space[12] }}>
+            <RecordListSummary
+              icon="people-outline"
+              label="ACTIVE STUDENTS"
+              value={Number.isFinite(limits.maxActiveStudents) ? `${activeCount} of ${limits.maxActiveStudents}` : String(activeCount)}
+              description={Number.isFinite(limits.maxActiveStudents) ? 'Students currently using your plan allowance.' : 'Students currently active in your tutoring list.'}
+            />
+          </View>
+        ) : null}
+
         <View
           style={{
             flexDirection: 'row',
@@ -186,6 +184,7 @@ export default function StudentsScreen() {
                     Existing students are never deleted. Archive one, or upgrade for unlimited
                     students.
                   </Text>
+                  <Button label="View Pro plans" size="sm" variant="accent" onPress={() => router.push('/upgrade' as never)} />
                 </View>
               </View>
             </Card>
@@ -221,28 +220,28 @@ export default function StudentsScreen() {
           onEndReachedThreshold={0.4}
           onEndReached={() => void loadMore()}
           renderItem={({ item }) => (
-            <Card variant="raised" padded={false}>
-              <ListRow
-                title={item.nickname}
-                subtitle={subtitleFor(item)}
-                leading={
-                  <Avatar
-                    builtin={item.avatarType === 'custom' ? undefined : item.avatarType}
-                    imageUrl={item.avatarType === 'custom' ? item.customAvatarUrl : null}
-                    name={item.nickname}
-                  />
-                }
-                trailing={
-                  <Chip
-                    variant="status"
-                    tone={STATUS_TONE[item.status]}
-                    label={STATUS_LABEL[item.status]}
-                  />
-                }
-                showChevron
-                onPress={() => router.push(`/student-detail?id=${item.id}` as never)}
-              />
-            </Card>
+            <RecordListCard
+              icon="person-outline"
+              title={item.nickname}
+              subtitle={subtitleFor(item)}
+              leading={
+                <Avatar
+                  builtin={item.avatarType === 'custom' ? undefined : item.avatarType}
+                  imageUrl={item.avatarType === 'custom' ? item.customAvatarUrl : null}
+                  name={item.nickname}
+                  size="md"
+                />
+              }
+              status={<Chip variant="status" tone={STATUS_TONE[item.status]} label={STATUS_LABEL[item.status]} />}
+              tags={
+                <>
+                  {item.gradeLevel ? <Chip variant="status" tone="info" label={item.gradeLevel} icon="school-outline" /> : null}
+                  <Chip variant="status" tone="neutral" label={item.rateType === 'hourly' ? 'Hourly rate' : 'Per session'} icon="cash-outline" />
+                </>
+              }
+              actionLabel="View student"
+              onPress={() => router.push(`/student-detail?id=${item.id}` as never)}
+            />
           )}
           ListEmptyComponent={
             loading ? (

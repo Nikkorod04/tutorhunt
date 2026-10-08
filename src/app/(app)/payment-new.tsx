@@ -2,7 +2,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import { View } from 'react-native';
 
-import { Card, EmptyState, Screen, Text } from '@/components/ui';
+import { Card, EmptyState, Screen, Text, useToast } from '@/components/ui';
+import { FormHeader } from '@/components/FormHeader';
 import { PaymentForm } from '@/components/PaymentForm';
 import { createPayment, paymentErrorMessage, type PaymentInput } from '@/services/payments.service';
 import { listStudents } from '@/services/students.service';
@@ -15,6 +16,7 @@ export default function PaymentNewScreen() {
   const params = useLocalSearchParams<{ studentId?: string | string[] }>();
   const preferredStudentId = Array.isArray(params.studentId) ? params.studentId[0] : params.studentId;
   const profile = useAuthStore((state) => state.profile);
+  const { showToast } = useToast();
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -41,9 +43,12 @@ export default function PaymentNewScreen() {
     setError(null);
     try {
       const id = await createPayment(profile.uid, input);
+      showToast('Payment recorded successfully');
       router.replace({ pathname: '/payment-detail', params: { id } } as never);
     } catch (caught) {
-      setError(paymentErrorMessage(caught));
+      const message = paymentErrorMessage(caught);
+      setError(message);
+      showToast(message, 'danger');
     } finally {
       setBusy(false);
     }
@@ -53,10 +58,7 @@ export default function PaymentNewScreen() {
     <Screen scroll>
       <View style={{ paddingTop: theme.space[8], gap: theme.space[16] }}>
         <View style={{ gap: theme.space[4] }}>
-          <Text token="h1">Record payment</Text>
-          <Text token="caption" color={theme.colors.textMuted}>
-            Payments are recorded against a student and can cover multiple sessions.
-          </Text>
+          <FormHeader eyebrow="PAYMENT LEDGER" title="Record payment" description="Record money received against a student so balances stay accurate." icon="card-outline" />
         </View>
         {error ? <Card variant="flat"><Text token="caption" color={theme.colors.dangerText}>{error}</Text></Card> : null}
         {!loading && students.length === 0 ? (

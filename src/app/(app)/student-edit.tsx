@@ -5,11 +5,12 @@
  * rather than relying on the list screen having set a selected student.
  */
 
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
 
-import { Card, EmptyState, Screen, Skeleton, Text } from '@/components/ui';
+import { Card, EmptyState, Screen, Skeleton, Text, useToast } from '@/components/ui';
+import { FormHeader } from '@/components/FormHeader';
 import { StudentForm } from '@/components/StudentForm';
 import { getStudent, studentErrorMessage, updateStudent, type StudentInput } from '@/services/students.service';
 import { useAuthStore } from '@/stores/authStore';
@@ -22,6 +23,7 @@ export default function EditStudentScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const profile = useAuthStore((state) => state.profile);
   const upsert = useStudentStore((state) => state.upsert);
+  const { showToast } = useToast();
 
   const [student, setStudent] = useState<Student | null>(null);
   const [loading, setLoading] = useState(true);
@@ -64,8 +66,12 @@ export default function EditStudentScreen() {
       upsert({ ...updated, id, status: student?.status ?? 'active', createdAt: student?.createdAt ?? new Date(), updatedAt: new Date() });
       setStudent((current) => (current ? { ...current, ...updated } : current));
       setError(null);
+      showToast('Student updated successfully');
+      router.back();
     } catch (caught) {
-      setError(studentErrorMessage(caught));
+      const message = studentErrorMessage(caught);
+      setError(message);
+      showToast(message, 'danger');
     } finally {
       setBusy(false);
     }
@@ -98,7 +104,7 @@ export default function EditStudentScreen() {
   return (
     <Screen scroll>
       <View style={{ paddingTop: theme.space[8], gap: theme.space[16] }}>
-        <Text token="h1">Edit {student.nickname}</Text>
+        <FormHeader eyebrow="STUDENT RECORD" title={`Edit ${student.nickname}`} description="Update the information used for tutoring sessions and statements." icon="create-outline" />
 
         {error ? (
           <Card variant="flat">

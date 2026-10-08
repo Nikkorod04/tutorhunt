@@ -38,12 +38,14 @@
   },
   "scripts": {
     "start": "expo start",
+    "predeploy": "expo export --platform web",
+    "deploy-hosting": "npm run predeploy && npx firebase-tools deploy --only hosting --project tutorhunt-ded38",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types tests/pricing.test.ts && node --experimental-strip-types tests/validation.test.ts",
+    "test": "node --experimental-strip-types tests/pricing.test.ts && node --experimental-strip-types tests/validation.test.ts && node --experimental-strip-types tests/contact.test.ts",
     "test:rules": "node --experimental-strip-types --test tests/rules.test.ts"
   },
   "private": true

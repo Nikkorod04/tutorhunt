@@ -15,7 +15,9 @@ import {
   Skeleton,
   Text,
   TextField,
+  useToast,
 } from '@/components/ui';
+import { FormHeader } from '@/components/FormHeader';
 import { ensureEntitlement } from '@/services/entitlements.service';
 import {
   calculateStatementTotals,
@@ -102,6 +104,7 @@ export default function StatementNewScreen() {
   const profile = useAuthStore((state) => state.profile);
   const cachedEntitlement = useAuthStore((state) => state.entitlement);
   const setEntitlement = useAuthStore((state) => state.setEntitlement);
+  const { showToast } = useToast();
   const [entitlement, setLocalEntitlement] = useState(cachedEntitlement);
   const [students, setStudents] = useState<Student[]>([]);
   const [studentId, setStudentId] = useState(preferredStudentId ?? '');
@@ -276,9 +279,12 @@ export default function StatementNewScreen() {
         setLocalEntitlement(result.entitlement);
         setEntitlement(result.entitlement);
       }
+      showToast(reissueSource ? 'Statement reissued successfully' : 'Statement generated successfully');
       router.replace({ pathname: '/statement-detail', params: { id: result.statement.id, pdfUri: pdf.uri } } as never);
     } catch (caught) {
-      setError(statementErrorMessage(caught));
+      const message = statementErrorMessage(caught);
+      setError(message);
+      showToast(message, 'danger');
     } finally {
       setBusy(false);
     }
@@ -295,12 +301,12 @@ export default function StatementNewScreen() {
   return (
     <Screen scroll>
       <View style={{ paddingTop: theme.space[8], gap: theme.space[24] }}>
-        <View style={{ gap: theme.space[4] }}>
-          <Text token="h1">{reissueSource ? 'Reissue statement' : 'Generate statement'}</Text>
-          <Text token="caption" color={theme.colors.textMuted}>
-            {reissueSource ? `Correct ${reissueSource.statementNumber} before creating its replacement.` : 'Choose what to include in the parent statement.'}
-          </Text>
-        </View>
+        <FormHeader
+          eyebrow="PARENT STATEMENT"
+          title={reissueSource ? 'Reissue statement' : 'Generate statement'}
+          description={reissueSource ? `Correct ${reissueSource.statementNumber} before creating its replacement.` : 'Choose the sessions and reimbursable expenses to include.'}
+          icon="document-text-outline"
+        />
 
         {error ? <Card variant="flat"><Text token="caption" color={theme.colors.dangerText}>{error}</Text></Card> : null}
 
@@ -339,6 +345,18 @@ export default function StatementNewScreen() {
             </Text>
           </View>
         </Card>
+
+        {!reissueSource && quota?.exhausted ? (
+          <Card variant="premium">
+            <View style={{ gap: theme.space[8] }}>
+              <Text token="h3">Free statement limit reached</Text>
+              <Text token="caption" color={theme.colors.textMuted}>
+                Upgrade to Pro for unlimited PDF statements. Your existing records are kept.
+              </Text>
+              <Button label="View Pro plans" variant="accent" onPress={() => router.push('/upgrade' as never)} />
+            </View>
+          </Card>
+        ) : null}
 
         {loadingReissue || loadingCandidates ? <Skeleton variant="list" rows={3} /> : null}
 

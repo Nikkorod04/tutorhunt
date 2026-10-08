@@ -44,6 +44,29 @@ export interface Session {
   status: SessionStatus;
   rescheduledToId: string | null;
   recurringGroupId: string | null;
+  /** True when a tutor manually edited a generated session. */
+  recurringSessionModified: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type RecurringSeriesStatus = 'active' | 'ended' | 'cancelled';
+
+export interface RecurringSeries {
+  id: string;
+  studentId: string;
+  weekdays: number[];
+  startDate: Date;
+  endDate: Date;
+  startTime: string;
+  endTime: string;
+  subject: string;
+  topicCategory: TopicCategory;
+  rateType: RateType;
+  appliedRate: number;
+  skipDates: Date[];
+  generatedSessionIds: string[];
+  status: RecurringSeriesStatus;
   createdAt: Date;
   updatedAt: Date;
 }

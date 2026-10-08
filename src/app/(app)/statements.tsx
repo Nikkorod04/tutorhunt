@@ -1,10 +1,10 @@
-import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, RefreshControl, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Button, Card, EmptyState, ListRow, Screen, Text } from '@/components/ui';
+import { Badge, Button, Card, Chip, EmptyState, Screen, Text } from '@/components/ui';
+import { RecordListCard, RecordListSummary } from '@/components/RecordList';
 import {
   listStatements,
   statementErrorMessage,
@@ -29,6 +29,7 @@ export default function StatementsScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [studentNames, setStudentNames] = useState<Record<string, string>>({});
+  const loadedTotal = items.reduce((sum, item) => sum + item.totalDue, 0);
 
   const loadFirst = useCallback(async () => {
     if (!profile) return;
@@ -77,6 +78,17 @@ export default function StatementsScreen() {
   return (
     <Screen header={header} padded={false}>
       <View style={{ flex: 1 }}>
+        {items.length > 0 ? (
+          <View style={{ paddingHorizontal: theme.layout.screenPadding, paddingTop: theme.space[12], paddingBottom: theme.space[12] }}>
+            <RecordListSummary
+              icon="document-text-outline"
+              label="STATEMENTS LOADED"
+              value={formatPesoCompact(loadedTotal)}
+              description={`${items.length} generated statement${items.length === 1 ? '' : 's'} in this history.`}
+            />
+          </View>
+        ) : null}
+
         {error ? <View style={{ paddingHorizontal: theme.layout.screenPadding, paddingBottom: theme.space[12] }}><Card variant="flat"><Text token="caption" color={theme.colors.dangerText}>{error}</Text></Card></View> : null}
         <FlatList
           data={items}
@@ -86,16 +98,22 @@ export default function StatementsScreen() {
           onEndReachedThreshold={0.4}
           onEndReached={() => void loadMore()}
           renderItem={({ item }) => (
-            <Card variant="raised" padded={false}>
-              <ListRow
-                title={item.statementNumber}
-                subtitle={`${studentNames[item.studentId] ?? 'Student'} · ${formatDisplayDate(item.generatedAt)}${item.status === 'voided' ? ' · Voided' : ''}`}
-                leading={<Ionicons name="document-text-outline" size={20} color={theme.colors.primary} />}
-                trailing={<Text token="caption" tabular>{formatPesoCompact(item.totalDue)}</Text>}
-                showChevron
-                onPress={() => router.push({ pathname: '/statement-detail', params: { id: item.id } } as never)}
-              />
-            </Card>
+            <RecordListCard
+              icon="document-text-outline"
+              iconTone={item.status === 'active' ? 'info' : 'neutral'}
+              title={item.statementNumber}
+              subtitle={`${studentNames[item.studentId] ?? 'Student'} · Generated ${formatDisplayDate(item.generatedAt)}`}
+              amount={formatPesoCompact(item.totalDue)}
+              status={<Badge label={item.status === 'active' ? 'Active' : 'Voided'} tone={item.status === 'active' ? 'success' : 'neutral'} />}
+              tags={
+                <>
+                  <Chip variant="status" tone="neutral" label={`${formatDisplayDate(item.periodStart)} – ${formatDisplayDate(item.periodEnd)}`} icon="calendar-outline" />
+                  <Chip variant="status" tone="info" label={`${item.sessionIds.length} sessions`} icon="book-outline" />
+                </>
+              }
+              actionLabel="View statement"
+              onPress={() => router.push({ pathname: '/statement-detail', params: { id: item.id } } as never)}
+            />
           )}
           ListEmptyComponent={loading ? <View style={{ paddingTop: theme.space[48], alignItems: 'center' }}><ActivityIndicator color={theme.colors.primary} /></View> : <Card variant="flat"><EmptyState icon="document-text-outline" title="No statements yet" description="Generate a statement after recording billable sessions or reimbursable expenses." action={<Button label="Generate statement" onPress={() => router.push('/statement-new' as never)} />} /></Card>}
           ListFooterComponent={loadingMore ? <View style={{ paddingVertical: theme.space[16], alignItems: 'center' }}><ActivityIndicator color={theme.colors.primary} /></View> : null}

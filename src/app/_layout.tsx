@@ -14,6 +14,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { useAuthBootstrap } from '@/hooks/useAuthBootstrap';
+import { ToastProvider } from '@/components/ui';
 import { ThemeProvider, useTheme } from '@/theme';
 
 function RootNavigator() {
@@ -40,8 +41,10 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <ThemeProvider>
-          <StatusBar style="dark" />
-          <RootNavigator />
+          <ToastProvider>
+            <StatusBar style="dark" />
+            <RootNavigator />
+          </ToastProvider>
         </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

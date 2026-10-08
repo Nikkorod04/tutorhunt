@@ -2,7 +2,8 @@ import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
 
-import { Card, EmptyState, Screen, Skeleton, Text } from '@/components/ui';
+import { Card, EmptyState, Screen, Skeleton, Text, useToast } from '@/components/ui';
+import { FormHeader } from '@/components/FormHeader';
 import { TutorProfileForm } from '@/components/TutorProfileForm';
 import { getTutorProfile, tutorProfileErrorMessage, upsertTutorProfile, type TutorProfileInput } from '@/services/tutorProfiles.service';
 import { useAuthStore } from '@/stores/authStore';
@@ -12,6 +13,7 @@ import type { TutorProfile } from '@/types';
 export default function TutorProfileEditScreen() {
   const theme = useTheme();
   const profile = useAuthStore((state) => state.profile);
+  const { showToast } = useToast();
   const [publicProfile, setPublicProfile] = useState<TutorProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -45,9 +47,12 @@ export default function TutorProfileEditScreen() {
     try {
       const saved = await upsertTutorProfile(profile.uid, input);
       setPublicProfile(saved);
+      showToast(publicProfile ? 'Tutor profile updated' : 'Tutor profile published');
       router.replace({ pathname: '/tutor-profile', params: { id: profile.uid } } as never);
     } catch (caught) {
-      setError(tutorProfileErrorMessage(caught));
+      const message = tutorProfileErrorMessage(caught);
+      setError(message);
+      showToast(message, 'danger');
     } finally {
       setBusy(false);
     }
@@ -65,8 +70,7 @@ export default function TutorProfileEditScreen() {
     <Screen scroll>
       <View style={{ paddingTop: theme.space[8], gap: theme.space[16] }}>
         <View style={{ gap: theme.space[4] }}>
-          <Text token="h1">Public profile</Text>
-          <Text token="caption" color={theme.colors.textMuted}>Tell parents what you teach and how they can reach you.</Text>
+          <FormHeader eyebrow="TUTOR PROFILE" title="Public profile" description="Tell parents what you teach, where you work and how they can reach you." icon="globe-outline" />
         </View>
 
         {error ? <Card variant="flat"><Text token="caption" color={theme.colors.dangerText}>{error}</Text></Card> : null}

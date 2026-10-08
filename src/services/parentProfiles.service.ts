@@ -2,6 +2,7 @@ import { doc, getDoc, serverTimestamp, setDoc, type DocumentData } from 'firebas
 
 import type { ContactPreference, ParentProfile } from '@/types';
 import type { ServiceProvince } from '@/constants/locations';
+import { contactValidationError, normalizeContactValue } from '@/utils/contact';
 import { getDb } from './firebase';
 
 export interface ParentProfileInput {
@@ -33,7 +34,7 @@ function mapParentProfile(uid: string, data: DocumentData): ParentProfile {
     city: typeof data.city === 'string' ? data.city : '',
     province: data.province === 'Samar' ? 'Samar' : 'Leyte',
     barangay: typeof data.barangay === 'string' ? data.barangay : '',
-    contactPreference: data.contactPreference === 'phone' || data.contactPreference === 'email'
+    contactPreference: data.contactPreference === 'facebook' || data.contactPreference === 'phone' || data.contactPreference === 'email'
       ? data.contactPreference
       : 'messenger',
     contactValue: typeof data.contactValue === 'string' ? data.contactValue : '',
@@ -49,11 +50,15 @@ export async function getParentProfile(uid: string): Promise<ParentProfile | nul
 }
 
 export async function upsertParentProfile(uid: string, input: ParentProfileInput): Promise<ParentProfile> {
+  const contactError = contactValidationError(input.contactPreference, input.contactValue);
+  if (contactError) throw new Error(contactError);
+
   const ref = profileRef(uid);
   const current = await getDoc(ref);
   await setDoc(ref, {
     uid,
     ...input,
+    contactValue: normalizeContactValue(input.contactPreference, input.contactValue),
     createdAt: current.exists() ? current.data().createdAt : serverTimestamp(),
     updatedAt: serverTimestamp(),
   });

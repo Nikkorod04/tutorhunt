@@ -83,6 +83,7 @@ function mapSession(id: string, data: DocumentData): Session {
     status: (data.status ?? 'scheduled') as SessionStatus,
     rescheduledToId: typeof data.rescheduledToId === 'string' ? data.rescheduledToId : null,
     recurringGroupId: typeof data.recurringGroupId === 'string' ? data.recurringGroupId : null,
+    recurringSessionModified: data.recurringSessionModified === true,
     createdAt: toDate(data.createdAt),
     updatedAt: toDate(data.updatedAt),
   };
@@ -104,6 +105,12 @@ function derivedInput(input: SessionInput) {
   const billable = defaultBillableFor(input.status)
     || (canOverrideBillable(input.status) && input.billable);
   return { ...input, durationMinutes, sessionFee, billable };
+}
+
+/** Shared by recurring-series writes so generated sessions use the same fee
+ * and billable rules as a manually created session. */
+export function deriveSessionInput(input: SessionInput) {
+  return derivedInput(input);
 }
 
 export interface SessionPage {
@@ -172,6 +179,7 @@ export async function updateSession(
   await updateDoc(doc(getDb(), 'users', tutorUid, 'sessions', sessionId), {
     ...derivedInput(input),
     rescheduledToId: null,
+    recurringSessionModified: true,
     updatedAt: serverTimestamp(),
   });
 }

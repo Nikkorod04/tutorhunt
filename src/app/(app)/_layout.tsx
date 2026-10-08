@@ -29,6 +29,13 @@ export default function AppLayout() {
       <Stack.Screen name="session-new" />
       <Stack.Screen name="session-detail" />
       <Stack.Screen name="session-edit" />
+      <Stack.Screen name="recurring" />
+      <Stack.Screen name="recurring-new" />
+      <Stack.Screen name="recurring-detail" />
+      <Stack.Screen name="recurring-edit" />
+      <Stack.Screen name="parent-request-new" />
+      <Stack.Screen name="parent-request-detail" />
+      <Stack.Screen name="parent-request-edit" />
       <Stack.Screen name="expenses" />
       <Stack.Screen name="expense-new" />
       <Stack.Screen name="expense-detail" />
@@ -44,6 +51,7 @@ export default function AppLayout() {
       <Stack.Screen name="tutor-profile" />
       <Stack.Screen name="tutor-profile-edit" />
       <Stack.Screen name="parent-profile-edit" />
+      <Stack.Screen name="upgrade" />
     </Stack>
   );
 }

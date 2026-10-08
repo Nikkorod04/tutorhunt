@@ -14,11 +14,13 @@ import { CONTACT_PREFERENCE_LABELS, TUTOR_GRADE_LEVELS, TUTOR_MODE_LABELS, TUTOR
 import { locationForCity, TUTOR_HUNT_LOCATIONS, type ServiceProvince } from '@/constants/locations';
 import type { TutorProfile, TutoringMode } from '@/types';
 import type { TutorProfileInput } from '@/services/tutorProfiles.service';
+import { contactHelper, contactPlaceholder, contactValidationError } from '@/utils/contact';
 import { parseRate } from '@/utils/validation';
 import { useTheme } from '@/theme';
 
 const CONTACT_OPTIONS = [
   { value: 'messenger', label: CONTACT_PREFERENCE_LABELS.messenger },
+  { value: 'facebook', label: CONTACT_PREFERENCE_LABELS.facebook },
   { value: 'phone', label: CONTACT_PREFERENCE_LABELS.phone },
   { value: 'email', label: CONTACT_PREFERENCE_LABELS.email },
 ] as const;
@@ -63,6 +65,10 @@ export function TutorProfileForm({
   const [isVisible, setIsVisible] = useState(initial?.isVisible ?? false);
   const [subjectDraft, setSubjectDraft] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  function clearError(field: string) {
+    setErrors((current) => current[field] ? { ...current, [field]: '' } : current);
+  }
 
   function toggleSubject(subject: string) {
     setSubjects((current) => current.some((item) => item.toLowerCase() === subject.toLowerCase())
@@ -116,7 +122,8 @@ export function TutorProfileForm({
     if (parsedMinRate !== null && parsedMaxRate !== null && parsedMaxRate < parsedMinRate) {
       nextErrors.maxRate = 'Maximum rate must be at least the minimum rate.';
     }
-    if (!contactValue.trim()) nextErrors.contactValue = 'Add a way for parents to contact you.';
+    const contactError = contactValidationError(contactPreference, contactValue);
+    if (contactError) nextErrors.contactValue = contactError;
 
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors);
@@ -204,6 +211,7 @@ export function TutorProfileForm({
               setCity(value);
               setProvince(location?.province ?? 'Leyte');
               setBarangaysServed([]);
+              clearError('city');
             }}
           />
           {locationForCity(city) ? (
@@ -212,13 +220,13 @@ export function TutorProfileForm({
                 <Text token="caption" color={theme.colors.textSecondary}>Barangays served</Text>
                 <Chip label="All barangays in this municipality" selected={servesAllBarangays} onPress={() => setServesAllBarangays((current) => !current)} />
               </View>
-              {!servesAllBarangays ? <LocationPicker label="Choose specific barangays" value={barangaysServed} options={locationForCity(city)?.barangays ?? []} placeholder="Select barangays" multiple error={errors.barangays} onChange={(value) => { if (Array.isArray(value)) setBarangaysServed(value); }} /> : null}
+              {!servesAllBarangays ? <LocationPicker label="Choose specific barangays" value={barangaysServed} options={locationForCity(city)?.barangays ?? []} placeholder="Select barangays" multiple error={errors.barangays} onChange={(value) => { if (Array.isArray(value)) { setBarangaysServed(value); clearError('barangays'); } }} /> : null}
               <Text token="caption" color={theme.colors.textMuted}>Province: {province}. Online tutors can leave the barangay coverage broad; face-to-face tutors should choose where they travel.</Text>
             </View>
           ) : null}
           <View style={{ flexDirection: 'row', gap: theme.space[12] }}>
-            <View style={{ flex: 1 }}><TextField label="Minimum rate" value={minRate} onChangeText={setMinRate} placeholder="350" keyboardType="decimal-pad" error={errors.minRate} /></View>
-            <View style={{ flex: 1 }}><TextField label="Maximum rate" value={maxRate} onChangeText={setMaxRate} placeholder="600" keyboardType="decimal-pad" error={errors.maxRate} /></View>
+            <View style={{ flex: 1 }}><TextField label="Minimum rate" value={minRate} onChangeText={(value) => { setMinRate(value); clearError('minRate'); if (maxRate && parseRate(value) !== null && parseRate(maxRate) !== null && parseRate(value)! <= parseRate(maxRate)!) clearError('maxRate'); }} placeholder="350" keyboardType="decimal-pad" error={errors.minRate} /></View>
+            <View style={{ flex: 1 }}><TextField label="Maximum rate" value={maxRate} onChangeText={(value) => { setMaxRate(value); clearError('maxRate'); }} placeholder="600" keyboardType="decimal-pad" error={errors.maxRate} /></View>
           </View>
           <Text token="caption" color={theme.colors.textMuted}>Rates are shown in Philippine pesos per hour.</Text>
         </View>
@@ -248,9 +256,9 @@ export function TutorProfileForm({
         <View style={{ gap: theme.space[12] }}>
           <Text token="caption" color={theme.colors.textSecondary}>Preferred contact method</Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.space[8] }}>
-            {CONTACT_OPTIONS.map((option) => <Chip key={option.value} label={option.label} selected={contactPreference === option.value} onPress={() => setContactPreference(option.value)} />)}
+            {CONTACT_OPTIONS.map((option) => <Chip key={option.value} label={option.label} selected={contactPreference === option.value} onPress={() => { setContactPreference(option.value); clearError('contactValue'); }} />)}
           </View>
-          <TextField label="Contact detail" value={contactValue} onChangeText={setContactValue} placeholder={contactPreference === 'email' ? accountEmail : contactPreference === 'phone' ? '0917 000 0000' : 'Messenger username or link'} error={errors.contactValue} />
+          <TextField label="Contact detail" value={contactValue} onChangeText={(value) => { setContactValue(value); clearError('contactValue'); }} placeholder={contactPlaceholder(contactPreference, accountEmail)} helper={contactHelper(contactPreference)} error={errors.contactValue} />
           <Text token="caption" color={theme.colors.textMuted}>Only the contact detail you choose here is shown on your public profile.</Text>
         </View>
       </Card>

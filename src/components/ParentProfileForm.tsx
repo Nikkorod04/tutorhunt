@@ -7,9 +7,10 @@ import { CONTACT_PREFERENCE_LABELS } from '@/constants/tutorProfile';
 import { locationForCity, TUTOR_HUNT_LOCATIONS, type ServiceProvince } from '@/constants/locations';
 import type { ParentProfile, ContactPreference } from '@/types';
 import type { ParentProfileInput } from '@/services/parentProfiles.service';
+import { contactHelper, contactPlaceholder, contactValidationError } from '@/utils/contact';
 import { useTheme } from '@/theme';
 
-const CONTACT_OPTIONS: ContactPreference[] = ['messenger', 'phone', 'email'];
+const CONTACT_OPTIONS: ContactPreference[] = ['messenger', 'facebook', 'phone', 'email'];
 
 interface ParentProfileFormProps {
   accountName: string;
@@ -30,10 +31,15 @@ export function ParentProfileForm({ accountName, accountEmail, initial = null, s
   const [contactVisible, setContactVisible] = useState(initial?.contactVisible ?? false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  function clearError(field: string) {
+    setErrors((current) => current[field] ? { ...current, [field]: '' } : current);
+  }
+
   function handleSubmit() {
     const nextErrors: Record<string, string> = {};
     if (!city.trim()) nextErrors.city = 'A city is required.';
-    if (!contactValue.trim()) nextErrors.contactValue = 'Add a contact detail.';
+    const contactError = contactValidationError(contactPreference, contactValue);
+    if (contactError) nextErrors.contactValue = contactError;
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors);
       return;
@@ -70,6 +76,7 @@ export function ParentProfileForm({ accountName, accountEmail, initial = null, s
               setCity(value);
               setProvince(location?.province ?? 'Leyte');
               setBarangay('');
+              clearError('city');
             }}
           />
           {locationForCity(city) ? <LocationPicker label="Barangay (optional)" value={barangay} options={locationForCity(city)?.barangays ?? []} placeholder="Choose your barangay" helper="Optional for privacy; your municipality is enough to find nearby tutors." onChange={(value) => { if (typeof value === 'string') setBarangay(value); }} /> : null}
@@ -82,14 +89,15 @@ export function ParentProfileForm({ accountName, accountEmail, initial = null, s
         <View style={{ gap: theme.space[12] }}>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.space[8] }}>
             {CONTACT_OPTIONS.map((option) => (
-              <Chip key={option} label={CONTACT_PREFERENCE_LABELS[option]} selected={contactPreference === option} onPress={() => setContactPreference(option)} />
+              <Chip key={option} label={CONTACT_PREFERENCE_LABELS[option]} selected={contactPreference === option} onPress={() => { setContactPreference(option); clearError('contactValue'); }} />
             ))}
           </View>
           <TextField
             label="Contact detail"
             value={contactValue}
-            onChangeText={setContactValue}
-            placeholder={contactPreference === 'email' ? accountEmail : contactPreference === 'phone' ? '0917 000 0000' : 'Messenger username or link'}
+            onChangeText={(value) => { setContactValue(value); clearError('contactValue'); }}
+            placeholder={contactPlaceholder(contactPreference, accountEmail)}
+            helper={contactHelper(contactPreference)}
             error={errors.contactValue}
           />
         </View>

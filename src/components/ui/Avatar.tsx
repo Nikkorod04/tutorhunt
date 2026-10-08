@@ -6,10 +6,10 @@
  * A ring marks a verified tutor.
  */
 
-import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { Image, StyleSheet, View } from 'react-native';
 
+import { ILLUSTRATIONS } from '@/constants/illustrations';
 import { useTheme } from '@/theme';
 import { Text } from './Text';
 
@@ -19,7 +19,7 @@ export interface AvatarProps {
   /** Used for the initials fallback. */
   name?: string;
   imageUrl?: string | null;
-  /** Built-in student avatar, drawn as a glyph until art is added. */
+  /** Built-in student avatar illustration. */
   builtin?: 'boy' | 'girl' | 'neutral';
   size?: AvatarSize;
   /** Draws a primary ring, used for a verified tutor. */
@@ -35,12 +35,6 @@ function initialsFor(name?: string): string {
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
-
-const BUILTIN_GLYPH = {
-  boy: 'happy-outline',
-  girl: 'flower-outline',
-  neutral: 'person-outline',
-} as const;
 
 export function Avatar({
   name,
@@ -69,6 +63,18 @@ export function Avatar({
     );
   }
 
+  if (builtin) {
+    return (
+      <Image
+        source={ILLUSTRATIONS[builtin]}
+        style={[{ width: dimension, height: dimension, borderRadius: 999 }, ring]}
+        resizeMode="contain"
+        accessibilityLabel={`${builtin} student avatar`}
+        accessibilityIgnoresInvertColors
+      />
+    );
+  }
+
   return (
     <View
       style={[
@@ -81,20 +87,12 @@ export function Avatar({
         ring,
       ]}
     >
-      {builtin ? (
-        <Ionicons
-          name={BUILTIN_GLYPH[builtin]}
-          size={dimension * 0.5}
-          color={theme.colors.primary}
-        />
-      ) : (
-        <Text
-          token={size === 'lg' ? 'h3' : 'caption'}
-          color={theme.colors.primary}
-        >
-          {initialsFor(name)}
-        </Text>
-      )}
+      <Text
+        token={size === 'lg' ? 'h3' : 'caption'}
+        color={theme.colors.primary}
+      >
+        {initialsFor(name)}
+      </Text>
     </View>
   );
 }

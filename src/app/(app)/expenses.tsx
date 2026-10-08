@@ -1,4 +1,3 @@
-import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, FlatList, RefreshControl, View } from 'react-native';
@@ -9,10 +8,10 @@ import {
   Card,
   Chip,
   EmptyState,
-  ListRow,
   Screen,
   Text,
 } from '@/components/ui';
+import { RecordListCard, RecordListSummary } from '@/components/RecordList';
 import {
   EXPENSE_PAGE_SIZE,
   type ExpensePage,
@@ -52,6 +51,7 @@ export default function ExpensesScreen() {
         ? item.reimbursable
         : !item.reimbursable
   ));
+  const visibleTotal = visibleItems.reduce((sum, item) => sum + expenseTotal(item), 0);
 
   const loadFirst = useCallback(async () => {
     if (!profile) return;
@@ -106,6 +106,17 @@ export default function ExpensesScreen() {
   return (
     <Screen header={header} padded={false}>
       <View style={{ flex: 1 }}>
+        {visibleItems.length > 0 ? (
+          <View style={{ paddingHorizontal: theme.layout.screenPadding, paddingTop: theme.space[12] }}>
+            <RecordListSummary
+              icon="receipt-outline"
+              label="VISIBLE EXPENSES"
+              value={formatPesoCompact(visibleTotal)}
+              description={`${visibleItems.length} loaded expense${visibleItems.length === 1 ? '' : 's'} in the current filter.`}
+            />
+          </View>
+        ) : null}
+
         <View style={{ paddingHorizontal: theme.layout.screenPadding, paddingVertical: theme.space[12] }}>
           <View style={{ flexDirection: 'row', gap: theme.space[8] }}>
             <Chip label="All" selected={filter === 'all'} onPress={() => setFilter('all')} />
@@ -124,16 +135,22 @@ export default function ExpensesScreen() {
           onEndReachedThreshold={0.4}
           onEndReached={() => void loadMore()}
           renderItem={({ item }) => (
-            <Card variant="raised" padded={false}>
-              <ListRow
-                title={item.title}
-                subtitle={`${expenseCategoryLabel(item.category)} · ${formatDisplayDate(item.expenseDates[0] ?? item.createdAt)}`}
-                leading={<Ionicons name="receipt-outline" size={20} color={theme.colors.primary} />}
-                trailing={<View style={{ alignItems: 'flex-end', gap: theme.space[4] }}><Text token="caption" tabular>{formatPesoCompact(expenseTotal(item))}</Text><Text token="micro" color={item.reimbursable ? theme.colors.infoText : theme.colors.textMuted}>{item.reimbursable ? 'Reimbursable' : 'Personal'}</Text></View>}
-                showChevron
-                onPress={() => router.push({ pathname: '/expense-detail', params: { id: item.id } } as never)}
-              />
-            </Card>
+            <RecordListCard
+              icon="receipt-outline"
+              iconTone={item.reimbursable ? 'info' : 'neutral'}
+              title={item.title}
+              subtitle={`${expenseCategoryLabel(item.category)} · ${formatDisplayDate(item.expenseDates[0] ?? item.createdAt)}`}
+              amount={formatPesoCompact(expenseTotal(item))}
+              status={<Chip variant="status" tone={item.reimbursable ? 'info' : 'neutral'} label={item.reimbursable ? 'Reimbursable' : 'Personal'} />}
+              tags={
+                <>
+                  <Chip variant="status" tone="neutral" label={expenseCategoryLabel(item.category)} icon="pricetag-outline" />
+                  <Chip variant="status" tone="neutral" label={`${item.expenseDates.length} occurrence${item.expenseDates.length === 1 ? '' : 's'}`} icon="calendar-outline" />
+                </>
+              }
+              actionLabel="View expense"
+              onPress={() => router.push({ pathname: '/expense-detail', params: { id: item.id } } as never)}
+            />
           )}
           ListEmptyComponent={loading ? <View style={{ paddingTop: theme.space[48], alignItems: 'center' }}><ActivityIndicator color={theme.colors.primary} /></View> : <Card variant="flat"><EmptyState icon="receipt-outline" title="No expenses yet" description="Record transport, materials, printing and other tutoring costs." action={<Button label="Add expense" onPress={() => router.push({ pathname: '/expense-new', params: studentId ? { studentId } : undefined } as never)} />} /></Card>}
           ListFooterComponent={loadingMore ? <View style={{ paddingVertical: theme.space[16], alignItems: 'center' }}><ActivityIndicator color={theme.colors.primary} /></View> : null}

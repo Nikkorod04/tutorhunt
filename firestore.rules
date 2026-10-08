@@ -51,6 +51,11 @@ service cloud.firestore {
       return isSignedIn() && !isSuspended();
     }
 
+    function isTutor() {
+      return isSignedIn()
+        && userDoc(request.auth.uid).role == 'tutor';
+    }
+
     // -----------------------------------------------------------------------
     // users/{uid} — profile only. No entitlement, no counters.
     // -----------------------------------------------------------------------
@@ -197,6 +202,37 @@ service cloud.firestore {
       allow update, delete: if isAdmin() || (
         canWrite() && resource.data.parentUid == request.auth.uid
       );
+
+      // Tutors can express interest without receiving write access to the
+      // parent's request. The parent can read the interest records for their
+      // own post, while the tutor can read and update their own record.
+      match /interests/{tutorUid} {
+        allow read: if isAdmin()
+          || isOwner(tutorUid)
+          || (isSignedIn() && get(/databases/$(database)/documents/parentPosts/$(postId)).data.parentUid == request.auth.uid);
+
+        allow create: if isTutor()
+          && canWrite()
+          && isOwner(tutorUid)
+          && get(/databases/$(database)/documents/parentPosts/$(postId)).data.status == 'open'
+          && request.resource.data.tutorUid == request.auth.uid
+          && request.resource.data.parentUid == get(/databases/$(database)/documents/parentPosts/$(postId)).data.parentUid
+          && request.resource.data.status == 'active'
+          && request.resource.data.message is string
+          && request.resource.data.message.size() <= 500;
+
+        allow update: if isTutor()
+          && canWrite()
+          && isOwner(tutorUid)
+          && resource.data.tutorUid == request.auth.uid
+          && request.resource.data.tutorUid == resource.data.tutorUid
+          && request.resource.data.parentUid == resource.data.parentUid
+          && request.resource.data.status in ['active', 'withdrawn']
+          && request.resource.data.message is string
+          && request.resource.data.message.size() <= 500;
+
+        allow delete: if isAdmin() || (isTutor() && canWrite() && isOwner(tutorUid));
+      }
     }
 
     // -----------------------------------------------------------------------

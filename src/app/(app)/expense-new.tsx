@@ -3,7 +3,8 @@ import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
 
 import { ExpenseForm } from '@/components/ExpenseForm';
-import { Card, Screen, Skeleton, Text } from '@/components/ui';
+import { FormHeader } from '@/components/FormHeader';
+import { Card, Screen, Skeleton, Text, useToast } from '@/components/ui';
 import { createExpense, expenseErrorMessage, type ExpenseInput } from '@/services/expenses.service';
 import { listStudents } from '@/services/students.service';
 import { useAuthStore } from '@/stores/authStore';
@@ -15,6 +16,7 @@ export default function AddExpenseScreen() {
   const params = useLocalSearchParams<{ studentId?: string | string[] }>();
   const preferredStudentId = Array.isArray(params.studentId) ? params.studentId[0] : params.studentId;
   const profile = useAuthStore((state) => state.profile);
+  const { showToast } = useToast();
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -44,9 +46,12 @@ export default function AddExpenseScreen() {
         ...input,
         studentId: input.studentId ?? preferredStudentId ?? null,
       });
+      showToast('Expense added successfully');
       router.replace({ pathname: '/expense-detail', params: { id } } as never);
     } catch (caught) {
-      setError(expenseErrorMessage(caught));
+      const message = expenseErrorMessage(caught);
+      setError(message);
+      showToast(message, 'danger');
     } finally {
       setBusy(false);
     }
@@ -57,7 +62,7 @@ export default function AddExpenseScreen() {
   return (
     <Screen scroll>
       <View style={{ paddingTop: theme.space[8], gap: theme.space[16] }}>
-        <Text token="h1">Add expense</Text>
+        <FormHeader eyebrow="EXPENSE RECORD" title="Add expense" description="Track tutoring costs and choose which dates or student they belong to." icon="wallet-outline" />
         {error ? <Card variant="flat"><Text token="caption" color={theme.colors.dangerText}>{error}</Text></Card> : null}
         <ExpenseForm
           students={students}

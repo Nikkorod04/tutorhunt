@@ -81,10 +81,13 @@ export default function EarningsScreen() {
         </View>
 
         <Card variant="raised">
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <IconButton icon="chevron-back" variant="tonal" accessibilityLabel="Previous month" onPress={() => setMonth((current) => shiftMonth(current, -1))} />
-            <Text token="bodyStrong">{MONTH_NAMES[monthParts.month]} {monthParts.year}</Text>
-            <IconButton icon="chevron-forward" variant="tonal" accessibilityLabel="Next month" onPress={() => setMonth((current) => shiftMonth(current, 1))} />
+          <View style={{ gap: theme.space[8] }}>
+            <Text token="micro" color={theme.colors.textSecondary}>REPORTING MONTH</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <IconButton icon="chevron-back" variant="tonal" accessibilityLabel="Previous month" onPress={() => setMonth((current) => shiftMonth(current, -1))} />
+              <Text token="h3">{MONTH_NAMES[monthParts.month]} {monthParts.year}</Text>
+              <IconButton icon="chevron-forward" variant="tonal" accessibilityLabel="Next month" onPress={() => setMonth((current) => shiftMonth(current, 1))} />
+            </View>
           </View>
         </Card>
 
@@ -94,16 +97,16 @@ export default function EarningsScreen() {
           <View style={{ gap: theme.space[16] }}><Skeleton variant="card" /><Skeleton variant="card" /><Skeleton variant="card" /></View>
         ) : snapshot ? (
           <>
-            <Card variant="raised">
+            <Card variant="raised" style={{ backgroundColor: theme.colors.primarySubtle, borderColor: theme.colors.primaryBorder }}>
               <View style={{ gap: theme.space[16] }}>
-                <StatTile label="Gross session earnings" value={snapshot.grossSessionEarnings} variant="hero" animate />
+                <StatTile label="Net cash income" value={snapshot.netIncome} variant="hero" animate />
                 <Text token="caption" color={theme.colors.textMuted}>
-                  Accrual: billable sessions during this month, whether paid or not.
+                  Payments received minus non-reimbursable tutor costs for this month.
                 </Text>
-                <View style={{ height: 0.5, backgroundColor: theme.colors.borderSubtle }} />
+                <View style={{ height: 0.5, backgroundColor: theme.colors.primaryBorder }} />
                 <View style={{ flexDirection: 'row', gap: theme.space[16] }}>
+                  <View style={{ flex: 1 }}><StatTile label="Gross earnings" value={snapshot.grossSessionEarnings} /></View>
                   <View style={{ flex: 1 }}><StatTile label="Payments received" value={snapshot.paymentsReceived} /></View>
-                  <View style={{ flex: 1 }}><StatTile label="Net cash income" value={snapshot.netIncome} /></View>
                 </View>
               </View>
             </Card>
@@ -135,7 +138,7 @@ export default function EarningsScreen() {
                 <View style={{ flex: 1, gap: theme.space[4] }}>
                   <Text token="caption" color={theme.colors.warningText}>How to read this</Text>
                   <Text token="caption" color={theme.colors.warningText}>
-                    Gross is earned revenue. Net cash is payments received minus non-reimbursable tutor costs; they measure different things.
+                    Gross is earned revenue. Net cash is what remains from payments received after non-reimbursable tutor costs.
                   </Text>
                 </View>
               </View>
