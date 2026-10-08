@@ -1,0 +1,2722 @@
+TUTOR HUNT
+SYSTEM BLUEPRINT
+Version: 1.2
+Revision: 1.2 — every change from v1.0 is listed in Section 55 (Changelog)
+Companion document: DESIGN_PLAN.md — the authority for colour, typography,
+spacing, radius, elevation, motion and component states
+Target Platform: Expo Go / React Native
+Expo SDK: 57
+Expo Go Version: 57.0.9
+Primary Launch Area: Tacloban City, Philippines
+Backend: Firebase
+Primary Database: Cloud Firestore
+Authentication: Firebase Authentication
+File Storage: Firebase Storage
+Language: TypeScript
+Navigation: Expo Router
+
+============================================================
+1. PROJECT OVERVIEW
+============================================================
+
+Tutor Hunt is a mobile application designed for tutors and parents.
+
+The application has two major purposes:
+
+1. Tutor Management
+   Tutors can manage their students, tutoring sessions, expenses, payments,
+   reimbursements, earnings, and parent statements.
+
+2. Tutor Marketplace
+   Parents can browse available tutors and post tutoring requests.
+   Tutors can browse parent requests and publish their own public tutor profile.
+
+The system should initially focus on Tacloban City but must be structured so
+other cities and municipalities can be added later.
+
+The application should prioritize:
+- simplicity
+- low Firebase usage
+- low operating cost
+- mobile-first UX
+- secure private student data
+- clear separation between private tutor data and public marketplace data
+- freemium monetization
+- expandable architecture
+
+============================================================
+2. MAIN USER ROLES
+============================================================
+
+2.1 TUTOR
+
+A tutor can:
+- register/login
+- create and edit a tutor account
+- manage students/tutees
+- record tutoring sessions
+- create recurring tutoring sessions
+- track tutoring expenses
+- mark expenses as reimbursable by parents
+- track payments and unpaid balances
+- view earnings summaries
+- generate PDF statements
+- create a public tutor profile
+- browse parent tutor-request posts
+- contact parents through allowed external contact methods
+- manage subscription/freemium access
+
+2.2 PARENT
+
+A parent can:
+- register/login
+- browse tutor profiles
+- filter tutors
+- view tutor details
+- save/favorite tutors
+- post "Looking for Tutor" requests
+- edit/delete own posts
+- contact tutors using available external contact methods
+- report suspicious/inappropriate tutor profiles or posts
+
+2.3 ADMIN
+
+Admin features are not required for the earliest MVP but the database should
+support an admin role.
+
+Future admin responsibilities:
+- review reports
+- review tutor verification requests
+- suspend abusive accounts
+- manage marketplace content
+- manually activate subscriptions if needed
+- review credentials
+- manage supported locations/categories
+
+============================================================
+3. PRODUCT STRATEGY
+============================================================
+
+Tutor Hunt should NOT be built as only a tutor marketplace.
+
+The management system should be useful even when marketplace activity is low.
+
+Recommended priority:
+
+70% Tutor Management
+30% Tutor Marketplace
+
+Build order:
+1. Authentication
+2. Tutor management
+3. PDF/reporting
+4. Freemium
+5. Parent accounts
+6. Marketplace
+7. Verification/reviews
+8. Advanced features
+
+============================================================
+4. RECOMMENDED TECH STACK
+============================================================
+
+Frontend:
+- Expo SDK 57
+- React Native
+- TypeScript
+- Expo Router
+
+State Management:
+- Zustand recommended
+OR
+- React Context for very small state
+
+Backend:
+- Firebase
+
+Firebase services:
+- Firebase Authentication
+- Cloud Firestore
+- Firebase Storage
+
+Optional later:
+- Firebase Cloud Functions
+- Firebase App Check
+- Firebase Cloud Messaging
+- Firebase Analytics
+
+PDF:
+Use an Expo-compatible local PDF generation solution.
+Prefer generating PDFs on-device instead of uploading and regenerating through
+Firebase.
+
+Local data/cache:
+Start with in-memory state and Firestore.
+Consider expo-sqlite only if offline support or larger local caching becomes
+necessary later.
+
+IMPORTANT:
+Do not introduce unnecessary backend complexity during MVP.
+
+============================================================
+5. FREEMIUM MODEL
+============================================================
+
+Recommended freemium strategy:
+
+FREE TUTOR PLAN
+- maximum 2 active students
+- unlimited session records for those students
+- basic session tracking
+- basic expenses
+- basic earnings summary
+- maximum 2 PDF statements per month
+- public tutor profile
+- browse parent requests
+- contact parents
+- browse marketplace
+
+PRO TUTOR PLAN
+- unlimited active students
+- unlimited PDF statements
+- recurring sessions
+- advanced expense management
+- reimbursement tracking
+- advanced earnings analytics
+- student progress tracking
+- custom statement options
+- additional marketplace features in future
+
+Do not permanently lock the entire app after a trial.
+
+Optional:
+A 15-day Pro trial can be added later, but Free must remain usable.
+
+ENFORCEMENT (v1.1)
+Plan limits are enforced in two places, never only in the UI:
+- the active student count is derived at the moment of use (see 7.3), not read
+  from a stored counter
+- plan and proUntil live in entitlements/{uid}, a document the client cannot
+  write (see 6 and 32)
+The UI must still show the limit clearly, but the UI is not the enforcement
+layer.
+
+Recommended initial pricing concept only:
+- 1 month: PHP 29
+- 6 months: PHP 99
+- 1 year: PHP 149 to PHP 199
+
+Pricing is NOT final and must remain configurable.
+
+============================================================
+6. SUBSCRIPTION / ENTITLEMENT DESIGN
+============================================================
+
+Each tutor account has a separate entitlement document.
+
+Entitlements must NOT live in users/{uid}. The user document is owner-writable
+(see 31), so any entitlement stored there can be granted by the client itself.
+
+Entitlement document:
+
+entitlements/{uid}
+
+{
+  "uid": "firebase auth uid",
+  "plan": "free",
+  "proUntil": null,
+  "trialEndsAt": null,
+  "usageMonth": "2026-10",
+  "pdfStatementsThisMonth": 1,
+  "updatedAt": timestamp
+}
+
+Write policy, enforced by Firestore rules (see 31):
+- the owner may CREATE this document only with plan == "free" and proUntil == null
+- the owner may UPDATE only usageMonth and pdfStatementsThisMonth
+- pdfStatementsThisMonth may increase by at most 1 per update
+- plan, proUntil and trialEndsAt are immutable from the client
+- Pro activation happens through the Admin SDK, the Firebase console or a
+  future Cloud Function (see 33) — never from the mobile client
+
+activeStudentCount is deliberately NOT stored. It is derived on demand
+(see 7.3).
+
+IMPORTANT:
+Do not query the database every time a premium feature is tapped.
+
+Recommended flow:
+
+App launch/login
+-> fetch users/{uid} and entitlements/{uid} once
+-> store entitlement in Zustand/Auth state
+-> use cached plan information in the UI
+-> refresh only when necessary
+-> re-read after any action that consumes quota, such as generating a PDF
+
+Plan constants should be centralized.
+
+Example:
+
+PLAN_LIMITS = {
+  free: {
+    maxStudents: 2,
+    monthlyPDFs: 2,
+    recurringSessions: false,
+    reimbursementTracking: false,
+    advancedAnalytics: false
+  },
+
+  pro: {
+    maxStudents: Infinity,
+    monthlyPDFs: Infinity,
+    recurringSessions: true,
+    reimbursementTracking: true,
+    advancedAnalytics: true
+  }
+}
+
+Do not hard-code plan limits across multiple screens.
+
+============================================================
+7. FIREBASE USAGE MINIMIZATION RULES
+============================================================
+
+The agent must follow these rules.
+
+7.1 Avoid unnecessary realtime listeners
+
+Do NOT attach onSnapshot listeners to:
+- all students
+- all sessions
+- all expenses
+- all marketplace tutors
+- all parent posts
+
+Use standard reads when a screen opens.
+
+Realtime listeners should only be used where they provide real value.
+
+7.2 Paginate large collections
+
+Never load an entire lifetime of sessions.
+
+Example:
+- load most recent 10 sessions
+- load more on demand
+
+Marketplace:
+- load 10 to 20 tutor profiles
+- paginate
+- load 10 to 20 parent posts
+- paginate
+
+7.3 Derive the active student count, do not store it
+
+CHANGED IN v1.1. v1.0 stored an activeStudentCount counter and updated it on
+every activate/archive/restore. That counter lived in an owner-writable
+document, so a client could edit it, and it drifted whenever a write failed or
+happened offline.
+
+Instead, derive the count at the moment of use with a bounded query:
+
+  where("status", "==", "active"), limit(maxActiveStudents + 1)
+
+For a Free tutor the limit is 2, so this is at most 3 document reads — cheaper
+than maintaining a counter, and it cannot drift.
+
+Rules:
+- never store a derived count in Firestore
+- if a bounded query is ever too slow, move the counter behind a trusted
+  backend, never into a client-writable document
+
+7.4 Keep public marketplace documents small
+
+Public tutor cards should contain only data required for listings.
+
+Load additional details only when user opens tutor profile.
+
+7.5 Store images in Firebase Storage
+
+Never store Base64 image data in Firestore.
+
+Firestore stores URLs only.
+
+7.6 Generate PDFs locally
+
+Do not upload every generated statement unless a future feature requires it.
+
+7.7 Cache loaded account/plan state
+
+Use Zustand or Context.
+
+7.8 Use built-in student avatars
+
+Default avatars:
+- boy
+- girl
+- neutral/custom future option
+
+Only upload to Firebase Storage if custom avatar is selected.
+
+============================================================
+8. FIRESTORE HIGH-LEVEL STRUCTURE
+============================================================
+
+Recommended structure:
+
+users/{uid}
+
+users/{uid}/students/{studentId}
+
+users/{uid}/sessions/{sessionId}
+
+users/{uid}/expenses/{expenseId}
+
+users/{uid}/payments/{paymentId}
+
+users/{uid}/progressNotes/{progressId}
+
+users/{uid}/statements/{statementId}
+
+users/{uid}/recurringSeries/{seriesId}
+
+tutorProfiles/{uid}
+
+parentProfiles/{uid}
+
+parentPosts/{postId}
+
+users/{parentUid}/favorites/{tutorUid}
+
+reports/{reportId}
+
+entitlements/{uid}
+
+Optional later:
+reviews/{reviewId}
+verificationRequests/{requestId}
+adminActions/{actionId}
+
+NOTE:
+Private tutor data must not be stored inside public tutor profile documents.
+
+CHANGED IN v1.1:
+subscriptions/{uid} was declared in v1.0 but never modelled or given any rules.
+It is replaced by entitlements/{uid} (see 6). statements/{statementId} and
+recurringSeries/{seriesId} are new; they are documented in 18 and 14.
+
+============================================================
+9. USER DOCUMENT
+============================================================
+
+Collection:
+users
+
+Document ID:
+Firebase Auth UID
+
+Suggested fields:
+
+{
+  uid: string,
+  email: string,
+  displayName: string,
+  role: "tutor" | "parent" | "admin",
+
+  accountStatus: "active" | "suspended",
+
+  createdAt: timestamp,
+  updatedAt: timestamp
+}
+
+CHANGED IN v1.1:
+plan, proUntil, trialEndsAt, usageMonth and pdfStatementsThisMonth moved out of
+this document and into entitlements/{uid} (see 6). activeStudentCount was
+removed entirely and is now derived (see 7.3).
+
+role is immutable after account creation. The security rules reject any update
+that changes it (see 31).
+
+============================================================
+10. STUDENT / TUTEE MODEL
+============================================================
+
+Path:
+users/{tutorUid}/students/{studentId}
+
+Suggested fields:
+
+{
+  id: string,
+
+  nickname: string,
+
+  avatarType: "boy" | "girl" | "custom",
+  customAvatarUrl: string | null,
+
+  birthday: timestamp | null,
+
+  school: string,
+  gradeLevel: string,
+
+  parentGuardianName: string,
+  parentContact: string,
+
+  tutoringPlace: string,
+
+  rateType: "hourly" | "per_session",
+  defaultRate: number,
+
+  notes: string,
+
+  status: "active" | "inactive" | "archived",
+
+  createdAt: timestamp,
+  updatedAt: timestamp
+}
+
+IMPORTANT:
+Age should NOT be permanently stored if possible.
+Calculate age from birthday in the app.
+
+============================================================
+11. STUDENT FEATURES
+============================================================
+
+Tutor can:
+- create student
+- edit student
+- archive student
+- restore student
+- view student
+- view recent sessions
+- view recent expenses
+- view payment summary
+- generate statement
+- view progress notes
+
+Free plan:
+maximum 2 active students
+
+Only students with status "active" count toward the limit. Students that are
+"inactive" or "archived" never count.
+
+The count is derived, not stored (see 7.3). Before creating a student or
+restoring an archived one, run the bounded query and refuse the write if the
+limit would be exceeded. This check belongs in the service layer, not only in
+the UI.
+
+Existing students must never be deleted when Pro expires.
+
+If a Pro tutor has more than 2 active students and becomes Free:
+- preserve all student records
+- allow viewing records
+- prevent adding new active students
+- prevent restoring an archived student if that would exceed the limit
+- never silently archive or deactivate a student to fit the limit
+
+============================================================
+12. SESSION MODEL
+============================================================
+
+Path:
+users/{tutorUid}/sessions/{sessionId}
+
+Suggested fields:
+
+{
+  id: string,
+
+  studentId: string,
+
+  startsAt: timestamp,
+  endsAt: timestamp,
+
+  durationMinutes: number,
+
+  subject: string,
+
+  topicCategory:
+    "assignment"
+    | "spelling"
+    | "reading"
+    | "writing"
+    | "review"
+    | "exam_preparation"
+    | "project"
+    | "other",
+
+  topicDetails: string,
+
+  notes: string,
+
+  rateType: "hourly" | "per_session",
+  appliedRate: number,
+
+  sessionFee: number,
+
+  billable: boolean,
+
+  status:
+    "scheduled"
+    | "completed"
+    | "cancelled_by_tutor"
+    | "cancelled_by_parent"
+    | "student_absent"
+    | "rescheduled",
+
+  rescheduledToId: string | null,
+
+  recurringGroupId: string | null,
+
+  createdAt: timestamp,
+  updatedAt: timestamp
+}
+
+CHANGED IN v1.1:
+- startTime and endTime were free-text strings, which contradicted 41 and could
+  not be ordered, compared or range-queried reliably. They are replaced by
+  startsAt and endsAt, real Firestore Timestamps. sessionDate is gone; startsAt
+  covers it.
+- paymentStatus and amountPaid were removed. Payments are the single source of
+  truth at student level (see 16 and 17). If a screen needs a per-session
+  paid/unpaid badge, derive it from the student ledger for display only and
+  never write it back to the session.
+- billable is new (see 13).
+- rescheduledToId links a rescheduled session to its replacement.
+
+============================================================
+13. SESSION RULES
+============================================================
+
+Automatically calculate:
+
+durationMinutes =
+(endsAt - startsAt) in minutes
+
+If hourly:
+sessionFee =
+(durationMinutes / 60) * appliedRate
+
+If per-session:
+sessionFee =
+appliedRate
+
+BILLABLE (v1.1)
+Default by status:
+- completed               -> billable = true
+- student_absent          -> billable = false, tutor may set true
+- cancelled_by_parent     -> billable = false, tutor may set true
+- cancelled_by_tutor      -> billable = false
+- scheduled / rescheduled -> billable = false
+
+A session produces a charge when:
+
+  status == "completed" OR billable == true
+
+This lets a tutor charge for a no-show or a late cancellation without forcing
+that policy on every tutor. billable may only be set true on a completed,
+student_absent or cancelled_by_parent session.
+
+Cancelled sessions must remain in history for attendance tracking even when
+they are not billable.
+
+A session with status "rescheduled" must point at its replacement through
+rescheduledToId. The replacement is an ordinary session; the original stays in
+history and is not billable unless the tutor says otherwise.
+
+============================================================
+14. RECURRING SESSIONS
+============================================================
+
+Pro feature.
+
+Example:
+Tuesday and Thursday
+4:00 PM to 5:30 PM
+October 10 to December 15
+
+Recommended implementation (revised in v1.1):
+Create individual session documents for the generated dates, AND one template
+document so the series can be managed as a unit.
+
+users/{tutorUid}/recurringSeries/{seriesId}
+
+{
+  id: string,
+  studentId: string,
+  weekdays: number[],
+  startDate: timestamp,
+  endDate: timestamp,
+  startTime: string,
+  endTime: string,
+  subject: string,
+  topicCategory: string,
+  skipDates: [timestamp],
+  generatedSessionIds: [string],
+  status: "active" | "ended" | "cancelled",
+  createdAt: timestamp,
+  updatedAt: timestamp
+}
+
+Each generated session keeps recurringGroupId == seriesId, so the link resolves
+in both directions.
+
+Series-level operations the tutor must be able to perform:
+- extend the end date and generate only the additional sessions
+- edit the series, applied to future unmodified sessions only
+- cancel the series, removing the remaining future sessions in one action
+
+Guards:
+- cap a series at 100 sessions or 6 months, whichever comes first
+- never regenerate a date that already has a session in the series
+- skipDates exists so Philippine holidays can be excluded
+- editing or cancelling a series must never touch a session that is already
+  completed or billable
+
+Do not build highly complex calendar recurrence rules for MVP.
+
+Support:
+- selected weekdays
+- start date
+- end date
+- start time
+- end time
+- subject
+- topic
+- student
+
+============================================================
+15. EXPENSE MODEL
+============================================================
+
+Path:
+users/{tutorUid}/expenses/{expenseId}
+
+Suggested fields:
+
+{
+  id: string,
+
+  studentId: string | null,
+
+  title: string,
+
+  category:
+    "transportation"
+    | "materials"
+    | "printing"
+    | "food"
+    | "school_supplies"
+    | "other",
+
+  amountPerOccurrence: number,
+
+  expenseDates: [timestamp],
+
+  notes: string,
+
+  receiptUrl: string | null,
+
+  reimbursable: boolean,
+
+  reimbursementStatus:
+    "not_requested"
+    | "included_in_statement"
+    | "paid",
+
+  statementId: string | null,
+
+  createdAt: timestamp,
+  updatedAt: timestamp
+}
+
+For MVP:
+Multiple dates can be stored in expenseDates array.
+
+Example:
+Transportation
+PHP 40
+Oct 2, Oct 4, Oct 6
+
+AMOUNT SEMANTICS (v1.1)
+amount was ambiguous: the example above implies PHP 40 per date, but a single
+scalar field could equally be read as PHP 40 in total. The field is therefore
+renamed amountPerOccurrence, meaning:
+
+  expense total = amountPerOccurrence * expenseDates.length
+
+The example above is PHP 120 in total, not PHP 40.
+
+REIMBURSEMENT LIFECYCLE (v1.1)
+- not_requested          -> set when the expense is created
+- included_in_statement  -> set when a statement containing it is generated;
+                            statementId is recorded at the same time
+- paid                   -> set by the tutor when the parent pays
+
+An expense moves forward through these states only. Generating another
+statement must never re-flag an expense that is already included_in_statement
+or paid.
+
+If querying expenses by individual date becomes important later,
+migrate to expense occurrences.
+
+============================================================
+16. PAYMENT MODEL
+============================================================
+
+Path:
+users/{tutorUid}/payments/{paymentId}
+
+Suggested fields:
+
+{
+  id: string,
+
+  studentId: string,
+
+  amount: number,
+
+  datePaid: timestamp,
+
+  method:
+    "cash"
+    | "gcash"
+    | "maya"
+    | "bank"
+    | "other",
+
+  reference: string,
+
+  notes: string,
+
+  createdAt: timestamp
+}
+
+Payments are separate from sessions.
+
+This allows:
+- one payment covering multiple sessions
+- partial payments
+- payment history
+
+SOURCE OF TRUTH (v1.1)
+The payments collection is the single source of truth for money received.
+Outstanding is computed per student:
+
+  charges(student) = sum of billable session fees for that student
+                   + sum of reimbursable expense totals for that student
+  outstanding(student) = charges(student) - sum(payments for that student)
+
+There is no per-session allocation in the MVP. A payment is recorded against a
+student, not against particular sessions. This keeps the ledger unambiguous and
+matches how tutors actually collect money.
+
+If per-session paid status is ever required, derive it for display by applying
+payments to sessions oldest-first, and never write the result back to the
+session document.
+
+============================================================
+17. EARNINGS
+============================================================
+
+Tutor dashboard should calculate:
+
+- total completed-session fees
+- total amount paid
+- outstanding balance
+- reimbursable expenses
+- reimbursed expenses
+- non-reimbursable tutor expenses
+- net tutoring income
+
+Suggested formulas (v1.1):
+
+Gross Session Earnings =
+sum(sessionFee for sessions where status == "completed" OR billable == true)
+
+Reimbursable Expense Total =
+sum(amountPerOccurrence * expenseDates.length for reimbursable expenses)
+
+Outstanding (per student) =
+billable session fees + reimbursable expense totals - payments received
+for that student
+
+Outstanding (dashboard) =
+sum of Outstanding(per student) across all students
+
+Tutor Costs =
+sum of non-reimbursable expense totals
+
+Net Tutor Income =
+payments received - tutor costs
+
+BASIS NOTE (v1.1)
+Gross Session Earnings and Outstanding are accrual figures: they count what was
+earned or charged, whether or not cash arrived. Net Tutor Income is a cash
+figure: it counts money actually received. The two are not comparable, and the
+dashboard must label them so a tutor does not read Net as "earnings".
+
+DATE BASIS (v1.1)
+- session charges fall on startsAt
+- expense charges fall on the earliest entry in expenseDates
+- payments fall on datePaid
+All month and range filtering must use these fields.
+
+Do not create unnecessary aggregate documents in MVP unless performance requires it.
+
+Use date-range queries when needed.
+
+============================================================
+18. PDF STATEMENTS
+============================================================
+
+Tutor should be able to:
+
+1. choose student
+2. choose date range
+3. select completed sessions
+4. include reimbursable expenses
+5. optionally add note
+6. generate PDF
+7. share PDF using phone share sheet
+
+Suggested statement format:
+
+TUTOR HUNT
+Tutoring Statement
+
+Tutor:
+Student:
+Statement Period:
+Generated Date:
+
+SESSIONS
+Date | Subject | Duration | Fee
+
+Session Subtotal
+
+REIMBURSABLE EXPENSES
+Date | Expense | Amount
+
+Expense Subtotal
+
+TOTAL AMOUNT DUE
+
+Optional:
+Amount Paid
+Remaining Balance
+Tutor Contact
+Statement Number
+Notes
+
+STATEMENT RECORD (v1.1)
+The PDF file itself is never uploaded, but a small metadata record must be
+created so a statement can be referenced later:
+
+users/{tutorUid}/statements/{statementId}
+
+{
+  id: string,
+  studentId: string,
+  statementNumber: string,
+  periodStart: timestamp,
+  periodEnd: timestamp,
+  sessionIds: [string],
+  expenseIds: [string],
+  sessionSubtotal: number,
+  expenseSubtotal: number,
+  totalDue: number,
+  amountPaidAtIssue: number,
+  generatedAt: timestamp
+}
+
+statementNumber is per tutor and sequential, formatted TH-YYYY-NNNN, derived
+from the count of that tutor's existing statement records plus one.
+
+Generating a statement is one logical operation that must:
+1. create the statement record
+2. set included_in_statement and statementId on each included expense
+3. increment pdfStatementsThisMonth in entitlements/{uid}
+If step 3 fails, the statement must not be treated as generated.
+
+IMPLEMENTATION NOTE (v1.1)
+Use expo-print to render the statement to a local PDF and expo-sharing to open
+the share sheet. Both run in Expo Go with no development build. The preview
+screen may render the same HTML in a WebView before export.
+
+IMPORTANT:
+Generate locally on device where practical.
+
+Do not automatically upload the PDF to Firebase.
+
+Free plan:
+Maximum 2 generated statements per calendar month.
+
+Pro:
+Unlimited.
+
+============================================================
+19. PDF USAGE TRACKING
+============================================================
+
+Use fields in the entitlement document (see 6), not the user document:
+
+entitlements/{uid}
+  usageMonth: "YYYY-MM"
+  pdfStatementsThisMonth: number
+
+When current month changes:
+reset counter to zero when user next generates a PDF.
+
+Example logic:
+
+if usageMonth != currentMonth:
+  usageMonth = currentMonth
+  pdfStatementsThisMonth = 0
+
+Then check plan limit.
+
+ENFORCEMENT (v1.1)
+The client may update these two fields and nothing else, and
+pdfStatementsThisMonth may increase by at most 1 per update (see 31). That
+closes the v1.0 hole where a client could write 0 and reset its own quota.
+
+TIMEZONE (v1.1)
+currentMonth is computed in Asia/Manila (UTC+8), not from the raw device clock.
+If the device clock disagrees with the server, the server value wins.
+
+============================================================
+20. PUBLIC TUTOR PROFILE
+============================================================
+
+Collection:
+tutorProfiles
+
+Document ID:
+Tutor UID
+
+Keep this document compact.
+
+Suggested fields:
+
+{
+  uid: string,
+
+  displayName: string,
+  profilePhotoUrl: string | null,
+
+  shortBio: string,
+
+  subjects: string[],
+  gradeLevels: string[],
+
+  primarySubject: string,
+  gradeBand: string,
+
+  city: string,
+  areasServed: string[],
+
+  primaryMode: "face_to_face" | "online",
+
+  tutoringModes:
+    ["face_to_face", "online"],
+
+  rateFrom: number | null,
+  minRate: number | null,
+  maxRate: number | null,
+
+  education: string,
+
+  experienceSummary: string,
+
+  contactPreference:
+    "messenger"
+    | "phone"
+    | "email",
+
+  contactValue: string,
+
+  rating: number,
+  reviewCount: number,
+
+  identityVerified: boolean,
+  credentialsVerified: boolean,
+
+  isVisible: boolean,
+
+  createdAt: timestamp,
+  updatedAt: timestamp
+}
+
+IMPORTANT:
+Do not include private student, session, earnings, expense, or payment data.
+
+FILTER FIELDS (v1.1)
+Firestore allows only one array-contains per query and cannot express a range
+over two fields. subjects is therefore the single searchable array, and the
+scalar fields primarySubject, gradeBand, city, primaryMode and rateFrom exist so
+that every filter combination in 25 stays queryable.
+
+TRUST FIELDS (v1.1)
+rating, reviewCount, identityVerified and credentialsVerified are readable by
+the tutor but NOT writable by the tutor. The security rules pin those four
+fields so a client update cannot change them (see 31). They are set only by an
+admin or a trusted backend. A tutor must never be able to award itself a
+verification badge.
+
+============================================================
+21. TUTOR CREDENTIALS
+============================================================
+
+For MVP:
+Tutor may enter:
+- school/university
+- course/degree
+- year level
+- tutoring experience
+- certifications
+- short introduction
+
+If document uploads are added:
+Store files/images in Firebase Storage.
+
+Suggested later collection:
+tutorProfiles/{uid}/credentials/{credentialId}
+
+Verification must not claim criminal/background checks unless those checks
+actually exist.
+
+Possible badges:
+- Email Verified
+- Phone Verified
+- Identity Verified
+- Credentials Verified
+
+============================================================
+22. PARENT PROFILE
+============================================================
+
+Collection:
+parentProfiles
+
+Document ID:
+Parent UID
+
+Suggested fields:
+
+{
+  uid: string,
+  displayName: string,
+  city: string,
+  contactPreference: string,
+  contactValue: string,
+  contactVisible: boolean,
+  createdAt: timestamp,
+  updatedAt: timestamp
+}
+
+Avoid collecting unnecessary sensitive personal information.
+
+VISIBILITY (v1.1)
+contactVisible defaults to false. Section 31 never defined who could read
+parentProfiles in v1.0, which left a parent's contact details either exposed to
+every signed-in tutor or unreachable. The rules now allow another user to read a
+parent profile only when contactVisible == true (see 31). A parent who leaves it
+false is simply not contactable through the marketplace.
+
+============================================================
+23. PARENT TUTOR-REQUEST POSTS
+============================================================
+
+Collection:
+parentPosts
+
+Suggested fields:
+
+{
+  id: string,
+
+  parentUid: string,
+
+  title: string,
+
+  description: string,
+
+  subject: string,
+
+  gradeLevel: string,
+
+  city: string,
+  area: string,
+
+  scheduleText: string,
+
+  tutoringMode:
+    "face_to_face"
+    | "online"
+    | "either",
+
+  budgetType:
+    "hourly"
+    | "per_session"
+    | "negotiable",
+
+  minBudget: number | null,
+  maxBudget: number | null,
+
+  contactVisible: boolean,
+
+  status:
+    "open"
+    | "closed",
+
+  createdAt: timestamp,
+  updatedAt: timestamp
+}
+
+Marketplace list should paginate.
+
+CONTACT (v1.1)
+contactVisible defaults to false and is chosen by the parent when the post is
+created. A tutor can read the post either way, but can only obtain the parent's
+contact details when the parent opted in. The post never duplicates the contact
+value; it is read from parentProfiles.
+
+DEFAULT SORT (v1.1)
+Parent requests are ordered by createdAt descending, which is also the cursor
+field for pagination.
+
+============================================================
+24. FAVORITES
+============================================================
+
+Recommended structure:
+
+users/{parentUid}/favorites/{tutorUid}
+
+{
+  tutorUid: string,
+  displayName: string,
+  profilePhotoUrl: string | null,
+  subjects: string[],
+  city: string,
+  rateFrom: number | null,
+  snapshotAt: timestamp,
+  createdAt: timestamp
+}
+
+DENORMALISATION (v1.1)
+v1.0 stored only tutorUid, which forced one profile read per favourite just to
+render the list. That directly contradicts the read-minimisation rules in 7 and
+44. The favourite therefore carries a small display snapshot.
+
+Rules:
+- the snapshot is display-only and never treated as authoritative
+- refresh a snapshot when the parent opens the tutor's profile
+- if the tutor profile no longer exists, show the favourite as unavailable
+  rather than crashing
+
+Keep implementation simple.
+
+============================================================
+25. MARKETPLACE SEARCH / FILTERS
+============================================================
+
+FIRESTORE CONSTRAINTS (v1.1)
+v1.0 listed subject, grade level, area, mode and rate as independent filters.
+Firestore cannot execute that: a query allows at most ONE array-contains, and a
+range over two fields (minRate and maxRate) is not expressible at all. The
+filter set must be defined against what the database can actually do.
+
+Queryable tutor filters:
+- subject        -> array-contains on subjects (the only array filter)
+- city           -> equality on city
+- tutoring mode  -> equality on primaryMode
+- grade band     -> equality on gradeBand
+- minimum rate   -> range on rateFrom (<=)
+- verified       -> equality on credentialsVerified
+
+Every tutor query:
+  where city == selected
+  where isVisible == true
+  [+ at most one array-contains, or one equality, or one range]
+  order by updatedAt desc
+  limit 15
+  startAfter(cursor)
+
+DEFAULT SORT (v1.1)
+Tutors are ordered by updatedAt descending. Every paginated list needs a stable
+order, or startAfter returns duplicates and gaps. v1.0 never stated one.
+
+Queryable parent post filters:
+- subject        -> array-contains on a subjects array on the post
+- city           -> equality on city
+- tutoring mode  -> equality on tutoringMode
+- grade level    -> equality on gradeLevel
+- status         -> equality on status
+Ordered by createdAt desc.
+
+Do NOT build complex full-text search initially.
+
+MVP search must not attempt:
+- more than one array-contains per query
+- free-text matching on shortBio or description
+- sorting by rating (reviews are post-MVP, so every rating is empty)
+
+If full-text search becomes necessary later:
+consider a dedicated search provider.
+
+REQUIRED COMPOSITE INDEXES (v1.1)
+firestore.indexes.json must contain at least:
+- tutorProfiles: city ASC, isVisible ASC, updatedAt DESC
+- tutorProfiles: city ASC, isVisible ASC, primaryMode ASC, updatedAt DESC
+- tutorProfiles: city ASC, isVisible ASC, gradeBand ASC, updatedAt DESC
+- tutorProfiles: city ASC, isVisible ASC, rateFrom ASC, updatedAt DESC
+- tutorProfiles: subjects ARRAY, city ASC, isVisible ASC, updatedAt DESC
+- parentPosts: status ASC, createdAt DESC
+- parentPosts: status ASC, city ASC, createdAt DESC
+- sessions: studentId ASC, startsAt DESC
+- sessions: status ASC, startsAt ASC
+- expenses: reimbursable ASC, expenseDates ARRAY
+
+============================================================
+26. EXTERNAL CONTACT
+============================================================
+
+Do not build in-app chat during MVP.
+
+Use contact buttons such as:
+- Open Messenger
+- Call
+- SMS
+- Email
+
+The app should not expose private contact details unless the user has chosen to
+publish them.
+
+GATING (v1.1)
+A contact button is rendered only when the target actually opted in:
+- tutor contact: tutorProfiles.contactValue, published by the tutor
+- parent contact: parentProfiles.contactValue, readable only when
+  contactVisible == true
+A tutor viewing a parent request whose parent did not opt in sees the request
+but no contact button.
+
+Future:
+in-app messaging may be added later.
+
+============================================================
+27. REPORTING / SAFETY
+============================================================
+
+Users should eventually be able to report:
+- tutor
+- parent
+- tutor profile
+- parent post
+
+Suggested reports collection:
+
+reports/{reportId}
+
+{
+  reporterUid: string,
+  targetType:
+    "user"
+    | "tutor_profile"
+    | "parent_post",
+
+  targetId: string,
+
+  reason: string,
+  description: string,
+
+  status:
+    "pending"
+    | "reviewed"
+    | "resolved",
+
+  createdAt: timestamp
+}
+
+============================================================
+28. REVIEWS
+============================================================
+
+NOT required for first MVP.
+
+Possible future collection:
+
+reviews/{reviewId}
+
+{
+  reviewerUid: string,
+  tutorUid: string,
+  rating: number,
+  comment: string,
+  createdAt: timestamp
+}
+
+Future rules should prevent unrestricted anonymous review spam.
+
+============================================================
+29. STUDENT PROGRESS
+============================================================
+
+Future Pro feature.
+
+Path:
+users/{tutorUid}/progressNotes/{progressId}
+
+Suggested fields:
+
+{
+  id: string,
+  studentId: string,
+  sessionId: string | null,
+  subject: string,
+  observation: string,
+  rating:
+    "needs_improvement"
+    | "improving"
+    | "good"
+    | "excellent",
+  createdAt: timestamp
+}
+
+Possible future feature:
+Generate monthly progress report PDF.
+
+============================================================
+30. AUTHENTICATION
+============================================================
+
+Initial authentication:
+- email/password
+
+Optional later:
+- Google Sign-In
+- Apple Sign-In
+
+After signup:
+User selects:
+
+I am a:
+- Tutor
+- Parent
+
+Store role in users/{uid}.
+
+Do not trust client role alone.
+Security Rules must protect data.
+
+============================================================
+31. FIREBASE SECURITY CONCEPT
+============================================================
+
+Private user data must only be accessible by the owner.
+
+REVISED IN v1.1. v1.0 stated "users/{uid} allow read/write only if
+request.auth.uid == uid" while also storing plan, proUntil and the usage
+counters in that same document, so the client could grant itself Pro. The rules
+below close that and the other gaps found in review.
+
+Concept:
+
+users/{uid}
+- read: owner only
+- create: owner only, and role must be one of tutor/parent/admin
+- update: owner only, but role and accountStatus must be unchanged
+- delete: denied; account deletion runs through a trusted backend (see 33)
+
+users/{uid}/students/*, sessions/*, expenses/*, payments/*, progressNotes/*,
+statements/*, recurringSeries/*, favorites/*
+- read/write: owner only
+- additionally denied when the owner's accountStatus == "suspended"
+
+entitlements/{uid}
+- read: owner only
+- create: owner only, and plan must be "free" and proUntil must be null
+- update: owner may change only usageMonth and pdfStatementsThisMonth, and
+  pdfStatementsThisMonth may increase by at most 1
+- plan, proUntil, trialEndsAt: never writable by the client
+
+tutorProfiles/{uid}
+- read: signed-in users
+- create/update: matching uid only
+- rating, reviewCount, identityVerified, credentialsVerified: must be unchanged
+  on any client update (pinned fields)
+
+parentProfiles/{uid}
+- read: the owner always; other signed-in users only when contactVisible == true
+- write: matching uid only
+
+parentPosts/{postId}
+- read: signed-in users
+- write: the creating parent only
+
+reports/{reportId}
+- create: signed-in users
+- read/update: admin only, via a custom claim
+
+SUSPENSION (v1.1)
+accountStatus is now actually enforced. A suspended account can still sign in
+and read its own data, but every write under its own subtree is denied.
+
+ADMIN (v1.1)
+Admin access uses a Firebase Auth custom claim (admin == true), set only through
+the Admin SDK. It is never read from a Firestore document, because a Firestore
+document is exactly what a client could edit.
+
+IMPORTANT:
+Do not rely only on screen hiding for security.
+
+============================================================
+32. SUBSCRIPTION SECURITY
+============================================================
+
+MVP (revised in v1.1):
+plan and proUntil live in entitlements/{uid}, which the client can create only
+as "free" and can never escalate. The client can read its entitlement; it cannot
+grant one.
+
+Activation during development is manual, through the Firebase console or the
+Admin SDK, writing plan == "pro" and proUntil.
+
+Production:
+subscription activation should not rely on client-side modification.
+
+Recommended later:
+- verified server-side entitlement
+- Firebase Cloud Functions or trusted backend
+- optional Firebase Auth custom claims
+
+Never allow a mobile client to directly grant itself Pro.
+
+============================================================
+33. PAYMENT / SUBSCRIPTION IMPLEMENTATION
+============================================================
+
+Do not implement payment gateway before core app works.
+
+Development phase:
+Use manual/test entitlement switching.
+
+Example:
+Admin/test mode can set, in entitlements/{uid}:
+plan = "pro"
+proUntil = timestamp
+This is done through the Firebase console or the Admin SDK. It cannot be done
+from the app, by design.
+
+Later production options may include:
+- Google Play Billing
+- Apple In-App Purchase
+- supported subscription provider
+
+If distributing through app stores, subscription implementation must follow
+their current payment rules.
+
+Do not hard-code production payment logic in early MVP.
+
+============================================================
+34. PRO EXPIRATION BEHAVIOR
+============================================================
+
+When Pro expires:
+
+DO NOT delete data.
+
+Allow:
+- view existing students
+- view sessions
+- view expenses
+- view statements/history
+- browse marketplace
+
+Block:
+- adding students beyond Free limit
+- recurring sessions
+- advanced reimbursement tools
+- advanced analytics
+- premium PDF features after free quota
+
+Show:
+"Renew Tutor Hunt Pro"
+
+============================================================
+35. DASHBOARD
+============================================================
+
+Tutor dashboard should display:
+
+- greeting
+- today's sessions
+- next upcoming session
+- active students count
+- sessions this month
+- tutoring hours this month
+- earnings this month
+- outstanding amount
+- reimbursable expenses
+- quick actions
+
+Quick actions:
+- Add Student
+- Add Session
+- Add Expense
+- Generate Statement
+
+Keep dashboard queries minimal.
+
+READ BUDGET (v1.1)
+Computing this dashboard requires reading the current month's sessions, payments
+and expenses. At two students and roughly ten sessions a month that is 20 to 30
+document reads per open, which is acceptable and needs no aggregate documents.
+
+Do not introduce a monthly rollup document for the MVP. If a tutor regularly
+exceeds about 200 documents a month, revisit with a rollup or a Cloud Function.
+
+Outstanding on the dashboard is the sum of the per-student outstanding values
+(see 17), not a single global figure.
+
+============================================================
+36. RECOMMENDED NAVIGATION
+============================================================
+
+Tutor bottom tabs:
+
+1. Home
+2. Students
+3. Sessions
+4. Tutor Hunt
+5. Profile
+
+Expenses and reports can be reached from:
+- Home quick actions
+- Student profile
+- menu/profile
+
+Parent bottom tabs:
+
+1. Home
+2. Find Tutors
+3. Requests
+4. Favorites
+5. Profile
+
+============================================================
+37. TUTOR SCREEN LIST
+============================================================
+
+Authentication:
+- Welcome
+- Login
+- Register
+- Role Selection
+- Forgot Password
+
+Tutor:
+- Tutor Home
+- Students List
+- Add Student
+- Student Details
+- Edit Student
+- Sessions List
+- Add Session
+- Session Details
+- Edit Session
+- Add Recurring Session
+- Expenses List
+- Add Expense
+- Edit Expense
+- Payments
+- Add Payment
+- Earnings
+- Generate Statement
+- Statement Preview
+- Public Tutor Profile
+- Edit Public Profile
+- Parent Requests
+- Parent Request Details
+- Subscription / Upgrade
+- Profile / Settings
+
+============================================================
+38. PARENT SCREEN LIST
+============================================================
+
+Parent:
+- Parent Home
+- Tutor Marketplace
+- Tutor Details
+- Filter Tutors
+- Favorites
+- My Tutor Requests
+- Add Tutor Request
+- Edit Tutor Request
+- Request Details
+- Parent Profile
+- Settings
+
+============================================================
+39. EMPTY STATES
+============================================================
+
+Every major screen should have helpful empty states.
+
+Examples:
+
+Students:
+"No students yet.
+Add your first tutee to begin tracking sessions."
+
+Sessions:
+"No sessions recorded yet."
+
+Expenses:
+"No expenses yet."
+
+Parent Requests:
+"No tutor requests found."
+
+Favorites:
+"You haven't saved any tutors yet."
+
+============================================================
+40. VALIDATION RULES
+============================================================
+
+Student:
+- nickname required
+- birthday cannot be future date
+- defaultRate >= 0
+
+Session:
+- student required
+- startsAt required
+- endsAt must be after startsAt
+- applied rate cannot be negative
+- billable may only be true for completed, student_absent or cancelled_by_parent
+
+Expense:
+- amountPerOccurrence > 0
+- at least one date
+- reimbursable requires student association for parent statement inclusion
+
+Payment:
+- amount > 0
+- student required
+
+Tutor Profile:
+- display name required
+- at least one subject before publishing
+- city required before publishing
+
+Parent Post:
+- title required
+- subject required
+- grade level required
+- location required
+
+Contact (v1.1):
+- contactValue required when contactVisible is true
+- contactValue must not be stored when contactVisible is false
+
+Length caps (v1.1):
+- shortBio <= 600 characters
+- post description <= 1000 characters
+- notes fields <= 1000 characters
+Every free-text field written to Firestore needs a maximum length, so a single
+account cannot inflate storage or abuse the marketplace.
+
+============================================================
+41. DATE/TIME RULES
+============================================================
+
+Use timestamps for actual dates.
+
+Sessions store startsAt and endsAt as real Firestore Timestamps (changed in
+v1.1; v1.0 stored free-text time strings, which cannot be ordered or compared).
+
+TIMEZONE (v1.1)
+The app operates in Asia/Manila (UTC+8). Firestore Timestamps are UTC, so:
+- convert to local time only for display
+- compute "today" and month boundaries as [local midnight, next local midnight)
+  converted to UTC before querying
+- never compare a local date string against a stored Timestamp
+
+Display using Philippine-friendly formatting.
+
+Recommended display:
+Oct 7, 2026
+4:00 PM
+
+Store dates in a way compatible with Firestore Timestamp.
+
+Avoid relying only on formatted strings for dates.
+
+============================================================
+42. CURRENCY
+============================================================
+
+Primary currency:
+Philippine Peso
+
+Display:
+PHP or ₱
+
+Store monetary values consistently as numeric values.
+
+============================================================
+43. FIREBASE STORAGE STRUCTURE
+============================================================
+
+Suggested:
+
+users/{uid}/profile/
+users/{uid}/students/{studentId}/
+tutors/{uid}/credentials/
+expenses/{uid}/{expenseId}/
+
+Files:
+- profile images
+- custom student avatars
+- receipt photos
+- tutor credential files
+
+Do not keep duplicate uploads.
+
+Compress images before upload where reasonable.
+
+CLEANUP (v1.1)
+Deleting or replacing an avatar, receipt or credential file must delete the
+previous Storage object. Firestore and Storage are not linked, so an orphaned
+file otherwise persists forever. Account deletion must remove the whole
+users/{uid}/ and tutors/{uid}/ prefixes.
+
+============================================================
+44. PERFORMANCE RULES
+============================================================
+
+The agent must:
+
+- paginate marketplace lists
+- paginate long session lists
+- paginate long expense lists
+- avoid duplicate fetches
+- cache current user
+- cache current entitlement
+- use compact documents
+- fetch details only when needed
+- avoid realtime listeners unless justified
+- avoid loading private subcollections for marketplace cards
+- use indexes only where queries require them
+- never store a derived count; derive it with a bounded query (see 7.3)
+- never issue more than one array-contains per query (see 25)
+- give every paginated list a fixed, documented order
+
+============================================================
+45. ZUSTAND STORE SUGGESTION
+============================================================
+
+Suggested stores:
+
+authStore
+- firebase user
+- app user profile
+- role
+- entitlement (plan, proUntil, usage counters)
+- loading
+
+studentStore
+- loaded students
+- selected student
+
+sessionStore
+- recent sessions
+- selected session
+
+marketplaceStore
+- current tutor result page
+- filters
+- parent posts
+
+Do not store everything permanently in global state.
+
+============================================================
+46. RECOMMENDED PROJECT STRUCTURE
+============================================================
+
+TutorHunt/
+|
+|-- app/
+|   |
+|   |-- (auth)/
+|   |   |-- login.tsx
+|   |   |-- register.tsx
+|   |   |-- forgot-password.tsx
+|   |   `-- role-selection.tsx
+|   |
+|   |-- (tutor)/
+|   |   |-- _layout.tsx
+|   |   |-- index.tsx
+|   |   |
+|   |   |-- students/
+|   |   |   |-- index.tsx
+|   |   |   |-- add.tsx
+|   |   |   `-- [id].tsx
+|   |   |
+|   |   |-- sessions/
+|   |   |   |-- index.tsx
+|   |   |   |-- add.tsx
+|   |   |   |-- recurring.tsx
+|   |   |   `-- [id].tsx
+|   |   |
+|   |   |-- expenses/
+|   |   |   |-- index.tsx
+|   |   |   |-- add.tsx
+|   |   |   `-- [id].tsx
+|   |   |
+|   |   |-- reports/
+|   |   |   `-- statement.tsx
+|   |   |
+|   |   |-- marketplace/
+|   |   |   |-- index.tsx
+|   |   |   `-- parent-post-[id].tsx
+|   |   |
+|   |   `-- profile/
+|   |       |-- index.tsx
+|   |       |-- public-profile.tsx
+|   |       `-- subscription.tsx
+|   |
+|   |-- (parent)/
+|   |   |-- _layout.tsx
+|   |   |-- index.tsx
+|   |   |
+|   |   |-- tutors/
+|   |   |   |-- index.tsx
+|   |   |   `-- [id].tsx
+|   |   |
+|   |   |-- requests/
+|   |   |   |-- index.tsx
+|   |   |   |-- add.tsx
+|   |   |   `-- [id].tsx
+|   |   |
+|   |   |-- favorites.tsx
+|   |   `-- profile.tsx
+|   |
+|   `-- _layout.tsx
+|
+|-- components/
+|   |-- ui/            primitives per DESIGN_PLAN.md section 4
+|   |-- forms/
+|   |-- cards/
+|   |-- modals/
+|   `-- marketplace/
+|
+|-- theme/
+|   |-- colors.ts
+|   |-- typography.ts
+|   |-- spacing.ts
+|   |-- radius.ts
+|   |-- elevation.ts
+|   |-- motion.ts
+|   |-- index.ts
+|   |-- ThemeProvider.tsx
+|   `-- useTheme.ts
+|
+|-- constants/
+|   |-- plans.ts
+|   |-- subjects.ts
+|   |-- gradeLevels.ts
+|   `-- expenseCategories.ts
+|
+|-- services/
+|   |-- firebase.ts
+|   |-- auth.service.ts
+|   |-- entitlements.service.ts
+|   |-- students.service.ts
+|   |-- sessions.service.ts
+|   |-- recurring.service.ts
+|   |-- expenses.service.ts
+|   |-- payments.service.ts
+|   |-- statements.service.ts
+|   |-- marketplace.service.ts
+|   |-- subscription.service.ts
+|   `-- pdf.service.ts
+|
+|-- stores/
+|   |-- authStore.ts
+|   |-- studentStore.ts
+|   |-- sessionStore.ts
+|   `-- marketplaceStore.ts
+|
+|-- types/
+|   |-- user.ts
+|   |-- student.ts
+|   |-- session.ts
+|   |-- expense.ts
+|   |-- payment.ts
+|   `-- marketplace.ts
+|
+|-- utils/
+|   |-- date.ts
+|   |-- currency.ts
+|   |-- duration.ts
+|   |-- pricing.ts
+|   |-- validation.ts
+|   `-- permissions.ts
+|
+|-- tests/
+|   |-- pricing.test.ts
+|   `-- rules.test.ts
+|
+|-- assets/
+|   |-- avatars/
+|   `-- images/
+|
+|-- firestore.rules
+|-- firestore.indexes.json
+|-- app.json
+|-- package.json
+`-- README.md
+
+============================================================
+47. BUILD PHASES
+============================================================
+
+PHASE 1 - PROJECT FOUNDATION
+
+Goal:
+Get Expo project, navigation, Firebase, authentication and the security
+foundation working.
+
+Tasks:
+- initialize Expo SDK 57 project
+- configure Expo Router
+- configure TypeScript
+- configure Firebase JS SDK
+- create Firebase project configuration
+- setup Firebase Auth
+- create login
+- create registration
+- role selection
+- auth persistence
+- create users document after signup
+- create entitlements document after signup with plan == "free"
+- basic protected routing
+- constants/plans.ts holding the single PLAN_LIMITS definition
+- firestore.rules written and deployed from the first commit
+- firestore.indexes.json containing the indexes listed in 25
+- utils/pricing.ts plus tests/pricing.test.ts
+- tests/rules.test.ts running against the Firebase emulator
+
+Moved into Phase 1 in v1.1: PLAN_LIMITS, firestore.rules, the indexes and the
+pricing module. v1.0 built gating ad hoc in Phases 2, 6 and 7 and only
+"centralised" it in Phase 11, which guaranteed rework, and left the project
+without security rules until Phase 12.
+
+Do not build marketplace yet.
+
+------------------------------------------------------------
+
+PHASE 2 - STUDENT MANAGEMENT
+
+Goal:
+Tutor can manage students.
+
+Tasks:
+- Student type
+- Firestore student service
+- student list
+- add student
+- edit student
+- archive student
+- student details
+- avatar defaults
+- custom avatar upload
+- automatic age calculation
+- free plan max 2 active students
+- derived active-student check via bounded query (no stored counter)
+
+------------------------------------------------------------
+
+PHASE 3 - SESSION MANAGEMENT
+
+Goal:
+Tutor can fully track tutoring sessions.
+
+Tasks:
+- session model
+- add session
+- edit session
+- delete/archive session
+- duration calculation
+- session fee calculation
+- status handling
+- billable flag handling
+- recent sessions
+- paginated session history
+- student-specific session history
+
+Payments are not part of this phase. Per-session paid state is derived for
+display from the student ledger built in Phase 5 and is never stored on the
+session (see 12 and 16).
+
+------------------------------------------------------------
+
+PHASE 4 - EXPENSE MANAGEMENT
+
+Goal:
+Tutor can track tutoring expenses.
+
+Tasks:
+- expense model
+- create expense
+- multiple dates
+- associate expense with student
+- reimbursable toggle
+- reimbursement status
+- optional receipt upload
+- expense history
+- paginated list
+
+------------------------------------------------------------
+
+PHASE 5 - PAYMENTS AND EARNINGS
+
+Goal:
+Tutor can understand income and balances.
+
+Tasks:
+- payment model
+- record payment
+- payment history
+- calculate gross earnings
+- calculate outstanding balance
+- calculate tutor costs
+- calculate net income
+- monthly summary
+
+------------------------------------------------------------
+
+PHASE 6 - PDF STATEMENTS
+
+Goal:
+Tutor can produce parent statements.
+
+Tasks:
+- statement builder
+- student selector
+- date range
+- fetch billable sessions (completed, or flagged billable)
+- fetch reimbursable expenses
+- totals
+- local PDF generation
+- PDF preview
+- phone share sheet
+- statement metadata record in users/{tutorUid}/statements
+- sequential statement number (TH-YYYY-NNNN)
+- mark included expenses with statementId
+- monthly free quota read from entitlements/{uid}
+- Pro unlimited quota
+
+------------------------------------------------------------
+
+PHASE 7 - RECURRING SESSIONS
+
+Goal:
+Pro tutors can quickly create repeated sessions.
+
+Tasks:
+- weekday selection
+- date range
+- generate dates
+- create session docs
+- recurringGroupId
+- recurringSeries template document
+- series extend / edit / cancel operations
+- skipDates for holidays
+- 100-session / 6-month cap
+- feature gating
+
+------------------------------------------------------------
+
+PHASE 8 - TUTOR PUBLIC PROFILE
+
+Goal:
+Tutor can appear publicly.
+
+Tasks:
+- tutorProfiles collection
+- edit public profile
+- subjects
+- grade levels
+- rates
+- tutoring mode
+- area
+- contact options
+- visibility toggle
+
+------------------------------------------------------------
+
+PHASE 9 - PARENT ACCOUNTS
+
+Goal:
+Parents can use Tutor Hunt.
+
+Tasks:
+- parent navigation
+- parent profile
+- role routing
+- browse tutors
+- tutor detail view
+- pagination
+- filters
+- favorites
+
+------------------------------------------------------------
+
+PHASE 10 - PARENT REQUEST POSTS
+
+Goal:
+Parents can post tutor requests.
+
+Tasks:
+- parentPosts collection
+- add request
+- edit request
+- close request
+- delete request
+- tutor browse parent posts
+- pagination
+- structured filters
+
+------------------------------------------------------------
+
+PHASE 11 - FREEMIUM POLISH
+
+Goal:
+Proper premium gating.
+
+Tasks:
+- verify every gate reads PLAN_LIMITS from constants/plans.ts rather than
+  re-declaring limits (the constant itself was created in Phase 1)
+- Upgrade modal
+- Subscription screen
+- trial-ready fields
+- Pro expiration handling
+- prevent client from granting itself Pro
+- prepare backend entitlement path
+
+------------------------------------------------------------
+
+PHASE 12 - SAFETY / ADMIN PREPARATION
+
+Goal:
+Prepare application for wider use.
+
+Tasks:
+- report profile
+- report post
+- account suspension enforced in the security rules
+- Firebase App Check
+- stronger Security Rules
+- verification request structure
+- admin-ready collections
+- full account deletion with recursive subcollection delete
+- Storage cleanup on delete and replace
+
+============================================================
+48. MVP DEFINITION
+============================================================
+
+MVP is complete when:
+
+TUTOR:
+- can register/login
+- can add up to 2 students on Free
+- can record sessions
+- can track expenses
+- can mark reimbursable expenses
+- can record payments
+- can view monthly totals
+- can create PDF statement
+- can publish public tutor profile
+- can browse parent requests
+
+PARENT:
+- can register/login
+- can browse tutors
+- can open tutor profiles
+- can favorite tutors
+- can create tutor request
+- can edit/close request
+- can contact tutors externally
+
+SYSTEM:
+- has Firebase Security Rules, tested against the emulator
+- a signed-in client cannot grant itself Pro or reset its own quota
+- suspended accounts cannot write
+- uses pagination with a documented order on every list
+- avoids unnecessary realtime listeners
+- implements Free/Pro gating from derived state, not a stored counter
+- pricing, duration and earnings maths are unit tested
+- preserves user data after Pro expires
+
+============================================================
+49. FEATURES NOT TO BUILD IN MVP
+============================================================
+
+Do NOT build these initially:
+
+- in-app messaging
+- live chat
+- video calls
+- full accounting system
+- complex calendar syncing
+- AI recommendations
+- AI tutor matching
+- advanced background checks
+- complex payment gateway
+- nationwide location database
+- full-text search engine
+- social feed
+- achievement/gamification
+- parent-to-tutor in-app wallet
+- complex admin dashboard
+
+These can be added after validation.
+
+============================================================
+50. FUTURE FEATURES
+============================================================
+
+Possible future improvements:
+
+- tutor reviews
+- verified tutor credentials
+- identity verification
+- tutor availability calendar
+- student progress reports
+- monthly parent progress PDF
+- reminders
+- push notifications
+- calendar integration
+- map/location support
+- online tutor mode
+- tutor matching recommendations
+- promo/referral system
+- multi-city support
+- payment/subscription automation
+- AI-assisted progress summaries
+- attendance analytics
+- earnings charts
+
+============================================================
+51. FIRESTORE QUERY EXAMPLES
+============================================================
+
+Recent sessions:
+- where studentId == selectedStudent
+- order by startsAt desc
+- limit 10
+
+Tutor marketplace:
+- where city == "Tacloban City"
+- where isVisible == true
+- order by updatedAt desc
+- limit 15
+
+Tutor marketplace with a subject filter:
+- where city == "Tacloban City"
+- where isVisible == true
+- where subjects array-contains "Math"
+- order by updatedAt desc
+- limit 15
+
+Parent requests:
+- where status == "open"
+- order by createdAt desc
+- limit 15
+
+Expenses:
+- order by createdAt desc
+- limit 20
+
+Active student check (see 7.3):
+- where status == "active"
+- limit maxActiveStudents + 1
+
+Use startAfter for pagination. Every query above must match an entry in
+firestore.indexes.json (see 25).
+
+============================================================
+52. DATA PRIVACY PRINCIPLES
+============================================================
+
+Because tutors may store information about children:
+
+- collect only necessary data
+- keep student information private
+- never expose students in marketplace
+- do not make birthday publicly visible
+- secure Firebase rules
+- avoid storing unnecessary sensitive information
+- allow tutor to delete/archive records
+- do not expose parent details publicly unless intentionally published,
+  enforced by contactVisible (see 22, 23 and 31)
+- support full account deletion, including private subcollections and Storage
+  objects, and remove the public profile and any favourites pointing at it
+- verification badges must never be self-awarded by the account they describe
+
+Custom student photos should be optional.
+
+Built-in avatars should be encouraged.
+
+============================================================
+53. UI / UX STYLE
+============================================================
+
+AUTHORITY (v1.2)
+The full visual language is specified in DESIGN_PLAN.md, which is the source of
+truth for colour, typography, spacing, radius, elevation, motion, component
+variants and interaction states. This section states the intent; the design plan
+states the implementation. Do not invent colours, spacing or durations outside
+the design plan's tokens.
+
+Design should feel:
+- friendly
+- educational
+- modern
+- lightweight
+- trustworthy
+
+Avoid:
+- overly corporate interface
+- crowded dashboards
+- decorative animation
+- excessive Firebase-backed refreshes
+- raw hex values or arbitrary spacing inside a screen
+- pure black or all-white large surfaces
+
+Use:
+- cards
+- clear status chips with an icon and a label, never colour alone
+- clear currency formatting
+- simple forms
+- good empty states with an illustration and an action
+- obvious Save buttons
+- loading indicators
+- skeletons only if useful
+- purposeful motion: press feedback, list entrance, sheet springs, animated
+  money counters
+- one dominant primary action per screen
+
+MOTION LINE (v1.2)
+v1.0 said "avoid unnecessary animations". That is now the purposeful-versus-
+gratuitous rule in section 6 of DESIGN_PLAN.md. Motion that explains a change is
+required; motion that decorates is banned. That section carries the explicit
+allow list and the banned list.
+
+============================================================
+54. AGENT DEVELOPMENT RULES
+============================================================
+
+When using an AI coding agent, follow these instructions:
+
+1. Read this entire blueprint before modifying code.
+
+2. Build only the current requested phase.
+
+3. Do not implement future features unless required for architecture.
+
+4. Do not replace the selected stack without permission.
+
+5. Use Expo SDK 57 compatible libraries only.
+
+6. The project must continue to run in Expo Go unless a future explicitly
+   approved feature requires a development build.
+
+7. Use TypeScript.
+
+8. Keep Firebase reads/writes minimal.
+
+9. Do not use realtime listeners by default.
+
+10. Paginate Firestore list queries, with a fixed documented order.
+
+11. Do not duplicate Firestore data unless there is a clear read optimization.
+
+12. Never store images as Base64 in Firestore.
+
+13. Do not create one massive component.
+
+14. Separate:
+    - UI
+    - services
+    - state
+    - utilities
+    - types
+
+15. Keep plan limits centralized.
+
+16. Never trust premium status solely from client UI.
+
+17. Never delete user data because a plan expired.
+
+18. Maintain backwards-compatible database fields where possible.
+
+19. Before installing a package:
+    - confirm Expo SDK 57 compatibility
+    - explain why it is required
+    - avoid unnecessary dependencies
+
+20. After each phase:
+    - run TypeScript checks
+    - check navigation
+    - test CRUD
+    - verify Firebase paths
+    - verify Security Rules assumptions
+    - summarize changed files
+
+21. Never store a derived count. Derive it with a bounded query.
+
+22. Never place an entitlement, quota counter or verification flag in a document
+    the client can write.
+
+23. Keep utils/pricing.ts pure and covered by tests. All money maths goes
+    through it; no screen computes fees, totals or balances on its own.
+
+24. Any new query must be reflected in firestore.indexes.json, and any new
+    collection must be reflected in firestore.rules.
+
+25. Never hardcode a colour, spacing, radius, elevation or duration in a screen
+    or component. Use the theme tokens in theme/ as specified in
+    DESIGN_PLAN.md.
+
+============================================================
+55. CHANGELOG
+============================================================
+
+Every change from v1.0 onward is listed below, with the section it affects.
+
+------------------------------------------------------------
+v1.1 to v1.2 — DESIGN SYSTEM
+------------------------------------------------------------
+
+- New companion document DESIGN_PLAN.md. It is the source of truth for colour,
+  typography, spacing, radius, elevation, motion, component variants and
+  interaction states.
+- 53 Rewritten to point at DESIGN_PLAN.md. The "avoid unnecessary animations"
+  line became the purposeful-versus-gratuitous motion rule, with an explicit
+  allow list and banned list in section 6 of the design plan.
+- 46 Added the theme/ directory (token files, elevation helper, motion, provider
+  and useTheme hook) and annotated components/ui/ as the primitive set.
+- 54 Rule 25 added: never hardcode a colour, spacing, radius, elevation or
+  duration; use the theme tokens.
+
+------------------------------------------------------------
+v1.0 to v1.1 — ARCHITECTURE
+------------------------------------------------------------
+
+This revision was produced from a full review of v1.0. Every change is listed
+with the section it affects. Nothing was removed without a replacement.
+
+SECURITY AND ENTITLEMENTS
+
+- 6  Entitlements moved out of users/{uid} into a new entitlements/{uid}
+     document. v1.0 stored plan and proUntil in an owner-writable document, so
+     the client could grant itself Pro. The client may now create the document
+     only as "free", may update only the two usage fields, and can never change
+     plan, proUntil or trialEndsAt.
+- 7.3 The stored activeStudentCount counter was removed. It was client-writable
+     and drift-prone. The count is now derived with a bounded query.
+- 9  plan, proUntil, trialEndsAt, usageMonth, pdfStatementsThisMonth and
+     activeStudentCount removed from the user document. role is now immutable.
+- 19 PDF quota tracking moved to entitlements/{uid}, with a rule that the
+     counter may increase by at most 1 per update, and an Asia/Manila month
+     boundary. v1.0 let a client write 0 and reset its own quota.
+- 20 rating, reviewCount, identityVerified and credentialsVerified are now
+     pinned fields: readable by the tutor, not writable by the tutor.
+- 31 The security concept was rewritten with explicit rules. Added: role and
+     accountStatus immutability, suspension enforcement, entitlement rules,
+     pinned verification fields, parentProfiles read gating, and admin access
+     via a custom claim rather than a Firestore document.
+- 32 Subscription security aligned with the entitlements document.
+- 33 Manual Pro activation is now explicitly an Admin SDK / console action.
+- 8  subscriptions/{uid} was declared but never modelled. Replaced by
+     entitlements/{uid}.
+
+MONEY AND DATA MODEL
+
+- 12 Session startTime and endTime were free-text strings; replaced by startsAt
+     and endsAt Timestamps. sessionDate removed. amountPaid and paymentStatus
+     removed from sessions. billable added. rescheduledToId added.
+- 13 Billable rules added: completed sessions bill by default, and a tutor may
+     mark a no-show or late cancellation as billable. v1.0 left cancelled and
+     absent sessions undefined.
+- 15 expense.amount renamed to amountPerOccurrence and its meaning fixed as
+     per-date, so the PHP 40 / Oct 2, 4, 6 example is PHP 120 in total.
+     statementId added and the reimbursement lifecycle defined.
+- 16 The payments collection is now stated to be the single source of truth,
+     with outstanding computed per student and no per-session allocation.
+     v1.0 stored payment state in two places with no rule for which won.
+- 17 Earnings formulas rewritten to use billable sessions and
+     amountPerOccurrence, with an accrual-versus-cash basis note and an explicit
+     date basis per figure.
+
+MARKETPLACE
+
+- 22 parentProfiles gained contactVisible, default false, and a read rule.
+- 23 parentPosts gained contactVisible. Post contact is read from the parent
+     profile, never duplicated onto the post.
+- 24 Favorites now carry a small display snapshot. v1.0 forced one profile read
+     per favourite just to render the list.
+- 25 The filter list was rewritten against Firestore's real limits: at most one
+     array-contains per query, a single rateFrom range instead of a range over
+     minRate and maxRate, and a documented default sort. The required composite
+     indexes are now enumerated.
+- 26 Contact buttons are explicitly gated on the target having opted in.
+
+NEW STRUCTURES
+
+- 14 recurringSeries/{seriesId} template added, with series-level extend, edit
+     and cancel, skipDates for holidays, and a 100-session / 6-month cap.
+- 18 statements/{statementId} metadata record added, with a sequential
+     statement number, so included expenses are traceable.
+- 46 New service files, utils/pricing.ts, and a tests/ directory.
+
+PROCESS
+
+- 1  Version bumped to 1.1.
+- 55 A changelog section was added. The v1.0 sections 55 to 58 (INITIAL AGENT
+     PROMPT, DEVELOPMENT PRIORITY, FINAL PRODUCT POSITIONING, END OF BLUEPRINT)
+     were renumbered to 56 to 59. None of their content was removed.
+- 5  Enforcement note added: limits are enforced in the service layer and the
+     rules, never only in the UI.
+- 11 Free-plan limits clarified: only active students count, and the check is a
+     bounded query in the service layer.
+- 35 Dashboard read budget stated: compute on demand, no rollup for the MVP.
+- 40 Validation updated for the renamed fields, plus contact rules and text
+     length caps.
+- 41 Timezone rules added for Asia/Manila.
+- 43 Storage cleanup rules added for replaced and deleted files.
+- 44 Performance rules extended: no derived counts, one array-contains, fixed
+     order on every list.
+- 45 authStore now holds the entitlement object.
+- 47 Phase 1 now includes PLAN_LIMITS, firestore.rules, the indexes and the
+     pricing module. Phase 6 adds the statement record, Phase 7 the series
+     template, Phase 12 account deletion and Storage cleanup. Phase 3's stale
+     "payment status" task was replaced by billable handling, Phase 6 now
+     fetches billable rather than completed sessions, and Phase 11's
+     "centralized PLAN_LIMITS" was reduced to verifying the Phase 1 constant.
+- 48 MVP definition extended with tested rules, tested pricing, no self-granted
+     Pro, and enforced suspension.
+- 51 Query examples updated for the new field names, default sorts and indexes.
+- 52 Privacy principles extended with contact gating, account deletion and the
+     no-self-awarded-badges rule.
+- 54 Agent rules 21 to 24 added, and rule 10 now requires a fixed documented
+     order on every paginated list.
+
+END OF CHANGELOG
+
+============================================================
+56. INITIAL AGENT PROMPT
+============================================================
+
+Use the following prompt when starting the coding agent:
+
+"You are helping me build Tutor Hunt, an Expo SDK 57 React Native TypeScript
+mobile application using Expo Router and Firebase.
+
+Read Tutor_Hunt_SYSTEM_BLUEPRINT.txt completely before making changes.
+
+Treat the blueprint as the source of truth.
+
+Do not attempt to build the entire application at once.
+
+Start with Phase 1 only:
+- initialize/inspect the Expo SDK 57 structure
+- configure Expo Router
+- configure Firebase JS SDK
+- implement Firebase Authentication
+- implement login
+- implement registration
+- implement tutor/parent role selection
+- create the users/{uid} Firestore document
+- create the entitlements/{uid} document with plan == "free"
+- write and deploy firestore.rules from the first commit
+- add firestore.indexes.json with the indexes listed in section 25
+- create constants/plans.ts and utils/pricing.ts, with tests
+- create protected role-based navigation
+
+Requirements:
+- Expo Go compatible
+- TypeScript
+- clean folder structure
+- minimal dependencies
+- minimal Firebase usage
+- never store an entitlement, quota counter or verification flag in a document
+  the client can write
+- no marketplace implementation yet
+- no payment implementation yet
+- no realtime listeners unless absolutely necessary
+
+Before coding:
+1. inspect the existing project
+2. explain the files you plan to create/change
+3. identify any package needed and why
+4. then implement Phase 1
+
+After implementation:
+- summarize changes
+- list commands I should run
+- list Firebase Console setup required
+- mention anything not yet implemented
+- do not continue to Phase 2 until requested."
+
+============================================================
+57. DEVELOPMENT PRIORITY
+============================================================
+
+Primary objective:
+
+Build a stable tutor management app first.
+
+Marketplace should be added only after:
+- students
+- sessions
+- expenses
+- payments
+- earnings
+- PDF statements
+
+are functioning correctly.
+
+============================================================
+58. FINAL PRODUCT POSITIONING
+============================================================
+
+Tutor Hunt should be positioned as:
+
+"Find tutors, manage students, track sessions, and simplify tutor payments."
+
+Its strongest advantage should not only be tutor discovery.
+
+The application should remain useful after a tutor and parent have already
+found each other.
+
+============================================================
+59. END OF BLUEPRINT
+============================================================
+
+This blueprint is intentionally modular.
+
+Changes to pricing, premium limits, marketplace scope, or future features should
+be made without rewriting the core tutor-management architecture.
+
+END OF FILE

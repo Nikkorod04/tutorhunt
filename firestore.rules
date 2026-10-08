@@ -1,0 +1,234 @@
+rules_version = '2';
+
+// Tutor Hunt — Firestore security rules.
+// Blueprint section 31.
+//
+// The v1.0 rule set was "users/{uid}: allow read/write if request.auth.uid == uid"
+// while that same document held plan, proUntil and the usage counters. The
+// client could therefore grant itself Pro. These rules separate entitlements
+// from the owner-writable profile and pin every field that must not be
+// client-controlled.
+//
+// KNOWN LIMITATION (see the note at the bottom of this file): a fully
+// server-verified quota needs a Cloud Function. These rules raise the bar
+// substantially but do not make the monthly PDF counter tamper-proof.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // -----------------------------------------------------------------------
+    // Helpers
+    // -----------------------------------------------------------------------
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // Admin is a custom claim set only through the Admin SDK. It is never read
+    // from a Firestore document, because a document is exactly what a client
+    // could edit.
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.admin == true;
+    }
+
+    function userDoc(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data;
+    }
+
+    // A suspended account can still sign in and read its own data, but every
+    // write under its own subtree is denied (blueprint section 31).
+    function isSuspended() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && userDoc(request.auth.uid).accountStatus == 'suspended';
+    }
+
+    function canWrite() {
+      return isSignedIn() && !isSuspended();
+    }
+
+    // -----------------------------------------------------------------------
+    // users/{uid} — profile only. No entitlement, no counters.
+    // -----------------------------------------------------------------------
+
+    match /users/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+
+      allow create: if isOwner(uid)
+        && request.resource.data.uid == uid
+        && request.resource.data.role in ['tutor', 'parent', 'admin']
+        && request.resource.data.accountStatus == 'active';
+
+      // role and accountStatus are immutable from the client. Only an admin
+      // may change them (that is how suspension is applied and lifted).
+      allow update: if isAdmin() || (
+        isOwner(uid)
+        && canWrite()
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.accountStatus == resource.data.accountStatus
+      );
+
+      // Account deletion runs through a trusted backend so subcollections and
+      // Storage objects are removed too (blueprint sections 33 and 43).
+      allow delete: if isAdmin();
+
+      // Private subtree: students, sessions, expenses, payments,
+      // progressNotes, statements, recurringSeries and favorites.
+      match /{sub=**} {
+        allow read: if isOwner(uid) || isAdmin();
+        allow write: if isOwner(uid) && canWrite();
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // entitlements/{uid} — plan, proUntil and the usage counters.
+    //
+    // The client may CREATE this only as a Free entitlement, and may UPDATE
+    // only the two usage fields. plan, proUntil and trialEndsAt can never be
+    // changed from a client.
+    // -----------------------------------------------------------------------
+
+    match /entitlements/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+
+      allow create: if isOwner(uid)
+        && request.resource.data.uid == uid
+        && request.resource.data.plan == 'free'
+        && request.resource.data.proUntil == null
+        && request.resource.data.trialEndsAt == null
+        && request.resource.data.pdfStatementsThisMonth == 0;
+
+      allow update: if isAdmin() || (
+        isOwner(uid)
+        && canWrite()
+        // Entitlement fields are pinned.
+        && request.resource.data.plan == resource.data.plan
+        && request.resource.data.proUntil == resource.data.proUntil
+        && request.resource.data.trialEndsAt == resource.data.trialEndsAt
+        && request.resource.data.uid == resource.data.uid
+        // usageMonth may only move forward, never backwards.
+        && request.resource.data.usageMonth is string
+        && request.resource.data.usageMonth >= resource.data.usageMonth
+        // The counter is a non-negative integer.
+        && request.resource.data.pdfStatementsThisMonth is int
+        && request.resource.data.pdfStatementsThisMonth >= 0
+        // Within the same month it may grow by at most one. A month roll-over
+        // is the only way it may drop.
+        && (
+          request.resource.data.usageMonth != resource.data.usageMonth
+          || request.resource.data.pdfStatementsThisMonth
+             <= resource.data.pdfStatementsThisMonth + 1
+        )
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    // -----------------------------------------------------------------------
+    // tutorProfiles/{uid} — public listing data.
+    //
+    // rating, reviewCount, identityVerified and credentialsVerified are pinned
+    // so a tutor can never award itself a verification badge or fabricate a
+    // rating. Only an admin or a trusted backend sets them.
+    // -----------------------------------------------------------------------
+
+    match /tutorProfiles/{uid} {
+      allow read: if isSignedIn();
+
+      allow create: if isOwner(uid)
+        && canWrite()
+        && request.resource.data.uid == uid
+        && trustFieldsDefault();
+
+      allow update: if isAdmin() || (
+        isOwner(uid)
+        && canWrite()
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.rating == resource.data.get('rating', 0)
+        && request.resource.data.reviewCount == resource.data.get('reviewCount', 0)
+        && request.resource.data.identityVerified == resource.data.get('identityVerified', false)
+        && request.resource.data.credentialsVerified == resource.data.get('credentialsVerified', false)
+      );
+
+      allow delete: if isAdmin() || (isOwner(uid) && canWrite());
+    }
+
+    function trustFieldsDefault() {
+      return (!('rating' in request.resource.data) || request.resource.data.rating == 0)
+        && (!('reviewCount' in request.resource.data) || request.resource.data.reviewCount == 0)
+        && (!('identityVerified' in request.resource.data) || request.resource.data.identityVerified == false)
+        && (!('credentialsVerified' in request.resource.data) || request.resource.data.credentialsVerified == false);
+    }
+
+    // -----------------------------------------------------------------------
+    // parentProfiles/{uid}
+    //
+    // v1.0 never defined who could read this, which left a parent's contact
+    // details either exposed to every signed-in tutor or unreachable. Another
+    // user may now read it only when the parent opted in.
+    // -----------------------------------------------------------------------
+
+    match /parentProfiles/{uid} {
+      allow read: if isOwner(uid) || isAdmin()
+        || (isSignedIn() && resource.data.get('contactVisible', false) == true);
+
+      allow create, update: if isOwner(uid)
+        && canWrite()
+        && request.resource.data.uid == uid;
+
+      allow delete: if isAdmin() || (isOwner(uid) && canWrite());
+    }
+
+    // -----------------------------------------------------------------------
+    // parentPosts/{postId}
+    // -----------------------------------------------------------------------
+
+    match /parentPosts/{postId} {
+      allow read: if isSignedIn();
+
+      allow create: if canWrite()
+        && request.resource.data.parentUid == request.auth.uid;
+
+      allow update, delete: if isAdmin() || (
+        canWrite() && resource.data.parentUid == request.auth.uid
+      );
+    }
+
+    // -----------------------------------------------------------------------
+    // reports/{reportId}
+    // -----------------------------------------------------------------------
+
+    match /reports/{reportId} {
+      allow create: if canWrite()
+        && request.resource.data.reporterUid == request.auth.uid
+        && request.resource.data.status == 'pending';
+
+      allow read, update, delete: if isAdmin();
+    }
+
+    // Everything not matched above is denied by default in rules_version 2.
+  }
+}
+
+// ---------------------------------------------------------------------------
+// KNOWN LIMITATION — PDF quota
+//
+// The rules above stop a client from setting plan = "pro", from lowering the
+// counter within a month, and from moving usageMonth backwards. They cannot
+// stop a client from advancing usageMonth to a future value in order to reset
+// the counter, because Firestore rules cannot compute the current month in
+// Asia/Manila from request.time reliably.
+//
+// Consequence: a determined user can still exceed the Free PDF quota. The
+// complete fix is a Cloud Function that owns the counter (blueprint sections
+// 32 and 33). Until then the quota is a product limit, not a security
+// boundary, and no other entitlement depends on it.
+//
+// The things that DO matter are enforced: Pro cannot be self-granted, and a
+// suspended account cannot write.
+// ---------------------------------------------------------------------------
