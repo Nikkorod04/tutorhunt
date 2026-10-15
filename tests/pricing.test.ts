@@ -124,7 +124,6 @@ test('only completed sessions are billable by default', () => {
   assert.equal(defaultBillableFor('student_absent'), false);
   assert.equal(defaultBillableFor('cancelled_by_parent'), false);
   assert.equal(defaultBillableFor('cancelled_by_tutor'), false);
-  assert.equal(defaultBillableFor('rescheduled'), false);
 });
 
 test('billable may only be overridden on the eligible statuses', () => {

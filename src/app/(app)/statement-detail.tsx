@@ -6,6 +6,7 @@ import { Alert, View } from 'react-native';
 
 import { Badge, Button, Card, EmptyState, Screen, Skeleton, Text, TopAppBar, useToast } from '@/components/ui';
 import { RecordDetailHeader, RecordDetailMetrics, RecordDetailRow, RecordDetailSection } from '@/components/RecordDetail';
+import { useSubmitGuard } from '@/hooks/useSubmitGuard';
 import { getExpense } from '@/services/expenses.service';
 import { getSession } from '@/services/sessions.service';
 import { getStudent } from '@/services/students.service';
@@ -24,6 +25,7 @@ export default function StatementDetailScreen() {
   const initialPdfUri = Array.isArray(params.pdfUri) ? params.pdfUri[0] : params.pdfUri;
   const profile = useAuthStore((state) => state.profile);
   const { showToast } = useToast();
+  const { beginSubmit, endSubmit } = useSubmitGuard();
   const [statement, setStatement] = useState<Statement | null>(null);
   const [student, setStudent] = useState<Student | null>(null);
   const [loading, setLoading] = useState(true);
@@ -35,6 +37,7 @@ export default function StatementDetailScreen() {
     if (!profile || !id) { setLoading(false); return; }
     try {
       const found = await getStatement(profile.uid, id);
+      setError(null);
       setStatement(found);
       if (found) setStudent(await getStudent(profile.uid, found.studentId));
     } catch (caught) { setError(statementErrorMessage(caught)); }
@@ -44,7 +47,7 @@ export default function StatementDetailScreen() {
   useEffect(() => { void load(); }, [load]);
 
   const regeneratePdf = useCallback(async () => {
-    if (!profile || !statement) return;
+    if (!profile || !statement || !beginSubmit()) return;
     setBusy(true);
     setError(null);
     try {
@@ -77,8 +80,11 @@ export default function StatementDetailScreen() {
       setPdfUri(pdf.uri);
       showToast('Statement PDF regenerated');
     } catch (caught) { const message = statementErrorMessage(caught); setError(message); showToast(message, 'danger'); }
-    finally { setBusy(false); }
-  }, [profile, showToast, statement, student]);
+    finally {
+      endSubmit();
+      setBusy(false);
+    }
+  }, [beginSubmit, endSubmit, profile, showToast, statement, student]);
 
   useEffect(() => {
     if (!initialPdfUri && statement && !pdfUri) void regeneratePdf();
@@ -86,14 +92,19 @@ export default function StatementDetailScreen() {
 
   async function previewPdf() {
     if (!pdfUri) { await regeneratePdf(); return; }
+    if (!beginSubmit()) return;
     setBusy(true);
     try { await Print.printAsync({ uri: pdfUri }); }
     catch (caught) { const message = statementErrorMessage(caught); setError(message); showToast(message, 'danger'); }
-    finally { setBusy(false); }
+    finally {
+      endSubmit();
+      setBusy(false);
+    }
   }
 
   async function sharePdf() {
     if (!pdfUri) { await regeneratePdf(); return; }
+    if (!beginSubmit()) return;
     setBusy(true);
     try {
       if (!(await Sharing.isAvailableAsync())) {
@@ -106,7 +117,10 @@ export default function StatementDetailScreen() {
         UTI: 'com.adobe.pdf',
       });
     } catch (caught) { const message = statementErrorMessage(caught); setError(message); showToast(message, 'danger'); }
-    finally { setBusy(false); }
+    finally {
+      endSubmit();
+      setBusy(false);
+    }
   }
 
   if (loading) {
@@ -125,7 +139,12 @@ export default function StatementDetailScreen() {
     return (
       <Screen scroll>
         <View style={{ paddingTop: theme.space[32] }}>
-          <EmptyState icon="alert-circle-outline" title="Statement not found" description={error ?? 'It may have been deleted, or the link is out of date.'} />
+          <EmptyState
+            icon="alert-circle-outline"
+            title="Statement not found"
+            description={error ?? 'It may have been deleted, or the link is out of date.'}
+            action={<Button label="Try again" icon="refresh-outline" variant="secondary" onPress={() => void load()} />}
+          />
         </View>
       </Screen>
     );

@@ -13,7 +13,6 @@ import {
   setDoc,
   startAfter,
   updateDoc,
-  writeBatch,
   where,
   type DocumentData,
   type QueryConstraint,
@@ -28,9 +27,10 @@ import {
   defaultBillableFor,
 } from '@/utils/pricing';
 import { getDb } from './firebase';
+import { dataErrorMessage } from '@/utils/error-message';
 
 export const SESSION_PAGE_SIZE = 10;
-export type EditableSessionStatus = Exclude<SessionStatus, 'rescheduled'>;
+export type EditableSessionStatus = SessionStatus;
 
 export interface SessionInput {
   studentId: string;
@@ -66,6 +66,14 @@ function toDate(value: unknown, fallback: Date = new Date(0)): Date {
 }
 
 function mapSession(id: string, data: DocumentData): Session {
+  const rawStatus = data.status;
+  const status: SessionStatus = rawStatus === 'completed'
+    || rawStatus === 'cancelled_by_tutor'
+    || rawStatus === 'cancelled_by_parent'
+    || rawStatus === 'student_absent'
+    ? rawStatus
+    : 'scheduled';
+
   return {
     id,
     studentId: typeof data.studentId === 'string' ? data.studentId : '',
@@ -80,8 +88,7 @@ function mapSession(id: string, data: DocumentData): Session {
     appliedRate: typeof data.appliedRate === 'number' ? data.appliedRate : 0,
     sessionFee: typeof data.sessionFee === 'number' ? data.sessionFee : 0,
     billable: data.billable === true,
-    status: (data.status ?? 'scheduled') as SessionStatus,
-    rescheduledToId: typeof data.rescheduledToId === 'string' ? data.rescheduledToId : null,
+    status,
     recurringGroupId: typeof data.recurringGroupId === 'string' ? data.recurringGroupId : null,
     recurringSessionModified: data.recurringSessionModified === true,
     createdAt: toDate(data.createdAt),
@@ -124,16 +131,29 @@ export interface ListSessionsOptions {
   status?: SessionStatus;
   pageSize?: number;
   cursor?: QueryDocumentSnapshot<DocumentData> | null;
+  startsAtFrom?: Date;
+  startsAtTo?: Date;
+  order?: 'asc' | 'desc';
 }
 
 export async function listSessions(
   tutorUid: string,
-  { studentId, status, pageSize = SESSION_PAGE_SIZE, cursor = null }: ListSessionsOptions = {},
+  {
+    studentId,
+    status,
+    pageSize = SESSION_PAGE_SIZE,
+    cursor = null,
+    startsAtFrom,
+    startsAtTo,
+    order = 'desc',
+  }: ListSessionsOptions = {},
 ): Promise<SessionPage> {
   const constraints: QueryConstraint[] = [];
   if (studentId) constraints.push(where('studentId', '==', studentId));
   if (status) constraints.push(where('status', '==', status));
-  constraints.push(orderBy('startsAt', 'desc'));
+  if (startsAtFrom) constraints.push(where('startsAt', '>=', startsAtFrom));
+  if (startsAtTo) constraints.push(where('startsAt', '<', startsAtTo));
+  constraints.push(orderBy('startsAt', order));
   if (cursor) constraints.push(startAfter(cursor));
   constraints.push(fsLimit(pageSize + 1));
 
@@ -163,7 +183,6 @@ export async function createSession(tutorUid: string, input: SessionInput): Prom
   await setDoc(ref, {
     id: ref.id,
     ...derivedInput(input),
-    rescheduledToId: null,
     recurringGroupId: null,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -178,7 +197,6 @@ export async function updateSession(
 ): Promise<void> {
   await updateDoc(doc(getDb(), 'users', tutorUid, 'sessions', sessionId), {
     ...derivedInput(input),
-    rescheduledToId: null,
     recurringSessionModified: true,
     updatedAt: serverTimestamp(),
   });
@@ -197,51 +215,10 @@ export async function updateSessionStatus(
   });
 }
 
-export async function markSessionRescheduled(
-  tutorUid: string,
-  originalId: string,
-  replacementId: string,
-): Promise<void> {
-  await updateDoc(doc(getDb(), 'users', tutorUid, 'sessions', originalId), {
-    status: 'rescheduled' satisfies SessionStatus,
-    billable: false,
-    rescheduledToId: replacementId,
-    updatedAt: serverTimestamp(),
-  });
-}
-
-/** Creates the replacement and links the original in one atomic write. */
-export async function rescheduleSession(
-  tutorUid: string,
-  originalId: string,
-  replacement: SessionInput,
-): Promise<string> {
-  const replacementRef = doc(sessionsCol(tutorUid));
-  const originalRef = doc(getDb(), 'users', tutorUid, 'sessions', originalId);
-  const batch = writeBatch(getDb());
-  batch.set(replacementRef, {
-    id: replacementRef.id,
-    ...derivedInput({ ...replacement, status: 'scheduled', billable: false }),
-    rescheduledToId: null,
-    recurringGroupId: null,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  });
-  batch.update(originalRef, {
-    status: 'rescheduled' satisfies SessionStatus,
-    billable: false,
-    rescheduledToId: replacementRef.id,
-    updatedAt: serverTimestamp(),
-  });
-  await batch.commit();
-  return replacementRef.id;
-}
-
 export async function deleteSession(tutorUid: string, sessionId: string): Promise<void> {
   await deleteDoc(doc(getDb(), 'users', tutorUid, 'sessions', sessionId));
 }
 
 export function sessionErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message) return error.message;
-  return 'Could not update the session. Please try again.';
+  return dataErrorMessage(error, 'Could not update the session. Please try again.');
 }

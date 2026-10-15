@@ -60,7 +60,5 @@ export default function EditSessionScreen() {
 
   if (loading) return <Screen scroll><View style={{ paddingTop: theme.space[16], gap: theme.space[16] }}><Skeleton width="45%" height={28} /><Skeleton variant="card" /></View></Screen>;
   if (!session) return <Screen scroll><EmptyState icon="alert-circle-outline" title="Session not found" description="It may have been deleted, or the link is out of date." /></Screen>;
-  if (session.status === 'rescheduled') return <Screen scroll><EmptyState icon="calendar-outline" title="This session was rescheduled" description="Edit the replacement session instead." /></Screen>;
-
   return <Screen scroll header={<TopAppBar title="Edit session" onBack={() => router.back()} />}><View style={{ paddingTop: theme.space[8], gap: theme.space[16] }}>{error ? <Card variant="flat"><Text token="caption" color={theme.colors.dangerText}>{error}</Text></Card> : null}<SessionForm students={students} initial={session} submitLabel="Save changes" busy={busy} onSubmit={submit} /></View></Screen>;
 }

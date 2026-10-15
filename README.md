@@ -147,8 +147,7 @@ query rather than a stored counter.
 
 **Phase 3 complete** — session management: paginated and filterable history,
 student-specific history, add/edit/detail/delete flows, duration and fee
-calculation, status and billable handling, plus linked replacement sessions
-for rescheduling.
+calculation, status and billable handling, plus in-place date/time rescheduling.
 
 **Phase 4 complete** — expense management: paginated expense history, multiple
 occurrence dates, student association, reimbursable expenses, reimbursement

@@ -15,6 +15,7 @@ import {
 
 import type { Announcement, UserAnnouncement } from '@/types';
 import { getDb } from './firebase';
+import { dataErrorMessage } from '@/utils/error-message';
 
 const ANNOUNCEMENT_PAGE_SIZE = 50;
 const MAX_TITLE_LENGTH = 120;
@@ -132,7 +133,5 @@ export async function markAllAnnouncementsRead(uid: string): Promise<void> {
 }
 
 export function announcementErrorMessage(error: unknown): string {
-  return error instanceof Error && error.message
-    ? error.message
-    : 'Could not load announcements. Please try again.';
+  return dataErrorMessage(error, 'Could not load announcements. Please try again.');
 }

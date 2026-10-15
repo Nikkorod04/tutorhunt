@@ -20,6 +20,7 @@ import {
   type NotificationType,
 } from '@/types';
 import { getDb } from './firebase';
+import { dataErrorMessage } from '@/utils/error-message';
 
 const NOTIFICATION_PAGE_SIZE = 50;
 
@@ -113,7 +114,5 @@ export async function markAllNotificationsRead(uid: string): Promise<void> {
 }
 
 export function notificationErrorMessage(error: unknown): string {
-  return error instanceof Error && error.message
-    ? error.message
-    : 'Could not load your notifications. Please try again.';
+  return dataErrorMessage(error, 'Could not load your notifications. Please try again.');
 }

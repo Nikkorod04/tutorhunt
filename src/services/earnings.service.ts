@@ -1,5 +1,6 @@
 /** Earnings and balance roll-ups. Blueprint sections 17 and 35. */
 
+import type { DocumentData, QueryDocumentSnapshot } from 'firebase/firestore';
 import type { Expense, Payment, Session, Student } from '@/types';
 import {
   computeCharges,
@@ -7,12 +8,13 @@ import {
   monthlySummary,
   sumReimbursedExpenses,
   sumPayments,
+  sumSessionCharges,
   type MonthlySummary,
 } from '@/utils/pricing';
 import { manilaMonthRange, manilaParts } from '@/utils/date';
 import { listAllExpenses } from './expenses.service';
 import { listAllPayments } from './payments.service';
-import { listAllSessions } from './sessions.service';
+import { listAllSessions, listSessions } from './sessions.service';
 
 export interface StudentBalance {
   studentId: string;
@@ -31,6 +33,46 @@ export interface EarningsSnapshot extends MonthlySummary {
   payments: Payment[];
   studentBalances: StudentBalance[];
   reimbursedExpenses: number;
+}
+
+export interface DashboardSnapshot {
+  grossSessionEarnings: number;
+  sessionCount: number;
+  tutoringMinutes: number;
+}
+
+/**
+ * Lightweight Home summary. The dashboard only needs current-month session
+ * totals, so it must not load the tutor's complete payments and expenses
+ * history. Full balances remain available through getEarningsSnapshot on the
+ * Earnings screen.
+ */
+export async function getDashboardSnapshot(
+  tutorUid: string,
+  month: Date,
+): Promise<DashboardSnapshot> {
+  const { start, end } = manilaMonthRange(month);
+  const sessions: Session[] = [];
+  let cursor: QueryDocumentSnapshot<DocumentData> | null = null;
+  let hasMore = true;
+
+  while (hasMore) {
+    const page = await listSessions(tutorUid, {
+      startsAtFrom: start,
+      startsAtTo: end,
+      pageSize: 200,
+      cursor,
+    });
+    sessions.push(...page.items);
+    cursor = page.cursor;
+    hasMore = page.hasMore;
+  }
+
+  return {
+    grossSessionEarnings: sumSessionCharges(sessions),
+    sessionCount: sessions.length,
+    tutoringMinutes: sessions.reduce((total, session) => total + session.durationMinutes, 0),
+  };
 }
 
 function isInRange(date: Date, start: Date, end: Date): boolean {

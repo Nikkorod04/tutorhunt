@@ -2,13 +2,12 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
-import { Alert, Pressable, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, View } from 'react-native';
 
 import {
   Avatar,
   Button,
   Card,
-  Chip,
   IconButton,
   ListRow,
   PlanBadge,
@@ -16,11 +15,13 @@ import {
   Screen,
   SectionHeader,
   Text,
+  TextField,
   TopAppBar,
   useToast,
 } from '@/components/ui';
 import { activePlanFor, limitsFor } from '@/constants/plans';
 import { TUTOR_AVATARS } from '@/constants/avatars';
+import { useSubmitGuard } from '@/hooks/useSubmitGuard';
 import { signOut, updateTutorAvatar } from '@/services/auth.service';
 import { accountErrorMessage, deleteMyAccount } from '@/services/account.service';
 import { ensureEntitlement } from '@/services/entitlements.service';
@@ -28,6 +29,8 @@ import { useAuthStore } from '@/stores/authStore';
 import { useTheme } from '@/theme';
 import type { TutorAvatarId } from '@/types';
 import { showToastAfterNavigation } from '@/utils/feedback';
+
+const DELETE_ACCOUNT_CONFIRMATION = 'yes-delete-my-account';
 
 function AccountIcon({ name, color, backgroundColor }: { name: React.ComponentProps<typeof Ionicons>['name']; color: string; backgroundColor: string }) {
   const theme = useTheme();
@@ -51,7 +54,10 @@ export default function ProfileScreen() {
   const [avatarId, setAvatarId] = useState<TutorAvatarId>(profile?.avatarId ?? 'default');
   const [customAvatarUri, setCustomAvatarUri] = useState<string | null>(null);
   const [customAvatarMimeType, setCustomAvatarMimeType] = useState<string | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const { showToast } = useToast();
+  const { beginSubmit, endSubmit } = useSubmitGuard();
 
   const activePlan = activePlanFor(entitlement);
   const limits = limitsFor(activePlan);
@@ -85,7 +91,7 @@ export default function ProfileScreen() {
   }
 
   async function saveTutorAvatar() {
-    if (!profile || avatarBusy) return;
+    if (!profile || avatarBusy || !beginSubmit()) return;
     setAvatarBusy(true);
     try {
       const customAvatarUrl = await updateTutorAvatar(profile.uid, {
@@ -102,18 +108,21 @@ export default function ProfileScreen() {
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Could not update your avatar.', 'danger');
     } finally {
+      endSubmit();
       setAvatarBusy(false);
     }
   }
 
   async function handleRefresh() {
-    if (!profile) return;
+    if (!profile || busy || !beginSubmit()) return;
     setBusy(true);
     try {
       setEntitlement(await ensureEntitlement(profile.uid));
+      showToast('Plan status refreshed');
     } catch {
-      Alert.alert('Could not refresh', 'Check your connection and try again.');
+      showToast('Could not refresh your plan status. Check your connection and try again.', 'danger');
     } finally {
+      endSubmit();
       setBusy(false);
     }
   }
@@ -126,17 +135,25 @@ export default function ProfileScreen() {
   }
 
   function confirmDeleteAccount() {
-    Alert.alert(
-      'Delete your account?',
-      'This permanently removes your students, sessions, expenses, payments, statements, notifications, uploaded student photos, and sign-in account. This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete account', style: 'destructive', onPress: () => void deleteAccount() },
-      ],
-    );
+    setDeleteConfirmation('');
+    setDeleteDialogOpen(true);
+  }
+
+  function cancelDeleteAccount() {
+    if (deleting) return;
+    setDeleteConfirmation('');
+    setDeleteDialogOpen(false);
+  }
+
+  function submitDeleteAccount() {
+    if (deleteConfirmation !== DELETE_ACCOUNT_CONFIRMATION || deleting) return;
+    setDeleteDialogOpen(false);
+    setDeleteConfirmation('');
+    void deleteAccount();
   }
 
   async function deleteAccount() {
+    if (!beginSubmit()) return;
     setDeleting(true);
     let leavingScreen = false;
     try {
@@ -148,6 +165,7 @@ export default function ProfileScreen() {
     } catch (caught) {
       showToast(accountErrorMessage(caught), 'danger');
     } finally {
+      endSubmit();
       if (!leavingScreen) setDeleting(false);
     }
   }
@@ -156,7 +174,7 @@ export default function ProfileScreen() {
     <Screen scroll padded header={<TopAppBar title="Profile" />}>
       <View style={{ paddingTop: theme.space[8], gap: theme.space[24] }}>
         <Card variant="raised" style={{ backgroundColor: theme.colors.primarySubtle, borderColor: theme.colors.primaryBorder }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.space[12] }}>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: theme.space[12] }}>
             <Pressable
               onPress={() => setAvatarEditorOpen((open) => !open)}
               accessibilityRole="button"
@@ -191,11 +209,8 @@ export default function ProfileScreen() {
             <View style={{ flex: 1, gap: theme.space[4] }}>
               <Text token="h2" numberOfLines={1}>{profile?.displayName || 'Your account'}</Text>
               <Text token="caption" color={theme.colors.textMuted} numberOfLines={1}>{profile?.email ?? ''}</Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.space[8] }}>
-                <Chip variant="status" tone="info" label={profile?.role === 'admin' ? 'Admin' : 'Tutor'} />
-                <PlanBadge plan={activePlan} />
-              </View>
             </View>
+            <PlanBadge plan={activePlan} />
           </View>
         </Card>
 
@@ -271,8 +286,8 @@ export default function ProfileScreen() {
           </View>
         </Card>
 
-        <Card variant="raised">
-          <View style={{ gap: theme.space[12] }}>
+        <Card variant="flat" style={{ padding: theme.space[12] }}>
+          <View style={{ gap: theme.space[8] }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
               <Text token="micro" color={theme.colors.textSecondary}>Statements this month</Text>
               <Text token="caption" tabular>{isUnlimited ? `${used} · unlimited` : `${used} of ${limits.monthlyPdfs}`}</Text>
@@ -318,6 +333,69 @@ export default function ProfileScreen() {
           </Card>
         </View>
       </View>
+
+      <Modal
+        visible={deleteDialogOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={cancelDeleteAccount}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={{ flex: 1, backgroundColor: theme.colors.surfaceOverlay, justifyContent: 'center', padding: theme.space[20] }}
+        >
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close delete account confirmation"
+            onPress={cancelDeleteAccount}
+            style={{ flex: 1, justifyContent: 'center' }}
+          >
+            <Pressable onPress={(event) => event.stopPropagation()}>
+              <Card variant="raised" style={{ width: '100%', maxWidth: 440, alignSelf: 'center' }}>
+                <View style={{ gap: theme.space[16] }}>
+                  <View style={{ gap: theme.space[4] }}>
+                    <Text token="h2">Delete your account?</Text>
+                    <Text token="body" color={theme.colors.textSecondary}>
+                      This permanently removes your students, sessions, expenses, payments, statements, notifications, uploaded student photos, and sign-in account. This cannot be undone.
+                    </Text>
+                  </View>
+
+                  <Text token="caption" color={theme.colors.textSecondary}>
+                    Type <Text token="caption" color={theme.colors.danger} style={{ fontWeight: '700' }}>&quot;{DELETE_ACCOUNT_CONFIRMATION}&quot;</Text> to confirm.
+                  </Text>
+                  <TextField
+                    label="Confirmation phrase"
+                    value={deleteConfirmation}
+                    onChangeText={setDeleteConfirmation}
+                    placeholder={DELETE_ACCOUNT_CONFIRMATION}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    autoComplete="off"
+                    returnKeyType="done"
+                    onSubmitEditing={submitDeleteAccount}
+                  />
+
+                  <View style={{ flexDirection: 'row', gap: theme.space[8] }}>
+                    <View style={{ flex: 1 }}>
+                      <Button label="Cancel" variant="secondary" onPress={cancelDeleteAccount} fullWidth />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Button
+                        label="Delete account"
+                        variant="destructive"
+                        disabled={deleteConfirmation !== DELETE_ACCOUNT_CONFIRMATION}
+                        loading={deleting}
+                        onPress={submitDeleteAccount}
+                        fullWidth
+                      />
+                    </View>
+                  </View>
+                </View>
+              </Card>
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Modal>
     </Screen>
   );
 }

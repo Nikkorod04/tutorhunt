@@ -9,13 +9,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, Linking, Pressable, View } from 'react-native';
+import { Linking, View } from 'react-native';
 
 import {
   Avatar,
   Button,
   Card,
   Chip,
+  ConfirmDialog,
   EmptyState,
   IconButton,
   ListRow,
@@ -143,7 +144,9 @@ export default function StudentDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [confirmation, setConfirmation] = useState<'archive' | 'delete' | null>(null);
   const [now, setNow] = useState(() => new Date());
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!profile || !id) {
@@ -155,10 +158,12 @@ export default function StudentDetailScreen() {
         getStudent(profile.uid, id),
         listSessions(profile.uid, { studentId: id, pageSize: 3 }),
       ]);
+      setError(null);
       setStudent(found);
         setRecentSessions([...sessions.items].sort((left, right) => compareSessionsForDisplay(left, right)).slice(0, 3));
     } catch {
       setStudent(null);
+      setError('Could not load this student. Check your connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -199,25 +204,11 @@ export default function StudentDetailScreen() {
   }
 
   function confirmArchive() {
-    Alert.alert(
-      'Archive this student?',
-      'Their sessions, expenses and statements are kept. You can restore them later.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Archive', style: 'destructive', onPress: () => void mutate('archive') },
-      ],
-    );
+    setConfirmation('archive');
   }
 
   function confirmPermanentDelete() {
-    Alert.alert(
-      'Delete student permanently?',
-      'The student profile and avatar will be deleted forever. Existing sessions, expenses, payments and statements will be kept as historical records.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete permanently', style: 'destructive', onPress: () => void deletePermanently() },
-      ],
-    );
+    setConfirmation('delete');
   }
 
   async function deletePermanently() {
@@ -275,7 +266,12 @@ export default function StudentDetailScreen() {
     return (
       <Screen scroll>
         <View style={{ paddingTop: theme.space[32] }}>
-          <EmptyState icon="alert-circle-outline" title="Student not found" description="It may have been removed, or the link is out of date." />
+          <EmptyState
+            icon="alert-circle-outline"
+            title="Student not found"
+            description={error ?? 'It may have been removed, or the link is out of date.'}
+            action={<Button label="Try again" icon="refresh-outline" variant="secondary" onPress={() => void load()} />}
+          />
         </View>
       </Screen>
     );
@@ -288,103 +284,149 @@ export default function StudentDetailScreen() {
     <Screen
       scroll
       header={(
-        <TopAppBar
-          title="Student info"
-          onBack={() => router.back()}
-          action={(
-            <IconButton
-              icon={actionsOpen ? 'close-outline' : 'ellipsis-vertical'}
-              accessibilityLabel={actionsOpen ? 'Close student actions' : 'Open student actions'}
-              onPress={() => setActionsOpen((open) => !open)}
-              color={theme.colors.textOnPrimary}
-              pressedBackgroundColor={theme.colors.primaryPressed}
-            />
-          )}
-        />
-      )}
-    >
-      <View style={{ paddingTop: theme.space[8], gap: theme.space[16], position: 'relative', overflow: 'visible' }}>
+        <View style={{ position: 'relative', zIndex: 20, overflow: 'visible' }}>
+          <TopAppBar
+            title="Student info"
+            onBack={() => router.back()}
+            action={(
+              <IconButton
+                icon={actionsOpen ? 'close-outline' : 'ellipsis-vertical'}
+                accessibilityLabel={actionsOpen ? 'Close student actions' : 'Open student actions'}
+                onPress={() => setActionsOpen((open) => !open)}
+                color={theme.colors.textOnPrimary}
+                pressedBackgroundColor={theme.colors.primaryPressed}
+              />
+            )}
+          />
 
-        {actionsOpen ? (
-          <>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Close student actions"
-              onPress={() => setActionsOpen(false)}
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: -theme.space[16],
-                right: -theme.space[16],
-                bottom: 0,
-                zIndex: 2,
-              }}
-            />
+          {actionsOpen ? (
             <View
               style={{
                 position: 'absolute',
-                top: 0,
-                right: 0,
+                top: '100%',
+                right: theme.layout.screenPadding,
                 width: '82%',
                 maxWidth: 320,
                 zIndex: 3,
                 elevation: 8,
               }}
             >
-              <Pressable onPress={(event) => event.stopPropagation()}>
-                <Card
-                  variant="raised"
-                  style={{
-                    paddingVertical: theme.space[4],
-                    borderColor: theme.colors.borderDefault,
-                    shadowColor: theme.colors.shadowBase,
-                    shadowOpacity: 0.2,
-                    shadowRadius: 12,
-                    shadowOffset: { width: 0, height: 5 },
-                  }}
-                >
-                  <ListRow title="Add session" leading={<Ionicons name="calendar-outline" size={20} color={theme.colors.textSecondary} />} onPress={() => { setActionsOpen(false); router.push(`/session-new?studentId=${student.id}` as never); }} />
-                  <ListRow title="Add expense" leading={<Ionicons name="wallet-outline" size={20} color={theme.colors.textSecondary} />} onPress={() => { setActionsOpen(false); router.push({ pathname: '/expense-new', params: { studentId: student.id } } as never); }} />
-                  <ListRow title="Record payment" leading={<Ionicons name="card-outline" size={20} color={theme.colors.textSecondary} />} onPress={() => { setActionsOpen(false); router.push({ pathname: '/payment-new', params: { studentId: student.id } } as never); }} />
-                  <ListRow title="Create statement" leading={<Ionicons name="document-text-outline" size={20} color={theme.colors.textSecondary} />} onPress={() => { setActionsOpen(false); router.push({ pathname: '/statement-new', params: { studentId: student.id } } as never); }} />
-                  <ListRow title="Edit student" leading={<Ionicons name="create-outline" size={20} color={theme.colors.textSecondary} />} onPress={() => { setActionsOpen(false); router.push(`/student-edit?id=${student.id}` as never); }} />
-                </Card>
-              </Pressable>
+              <Card
+                variant="raised"
+                style={{
+                  paddingVertical: theme.space[4],
+                  borderColor: theme.colors.borderDefault,
+                  shadowColor: theme.colors.shadowBase,
+                  shadowOpacity: 0.2,
+                  shadowRadius: 12,
+                  shadowOffset: { width: 0, height: 5 },
+                }}
+              >
+                <ListRow title="Add session" leading={<Ionicons name="calendar-outline" size={20} color={theme.colors.textSecondary} />} onPress={() => { setActionsOpen(false); router.push(`/session-new?studentId=${student.id}` as never); }} />
+                <ListRow title="Add expense" leading={<Ionicons name="wallet-outline" size={20} color={theme.colors.textSecondary} />} onPress={() => { setActionsOpen(false); router.push({ pathname: '/expense-new', params: { studentId: student.id } } as never); }} />
+                <ListRow title="Record payment" leading={<Ionicons name="card-outline" size={20} color={theme.colors.textSecondary} />} onPress={() => { setActionsOpen(false); router.push({ pathname: '/payment-new', params: { studentId: student.id } } as never); }} />
+                <ListRow title="Create statement" leading={<Ionicons name="document-text-outline" size={20} color={theme.colors.textSecondary} />} onPress={() => { setActionsOpen(false); router.push({ pathname: '/statement-new', params: { studentId: student.id } } as never); }} />
+                <ListRow title="Edit student" leading={<Ionicons name="create-outline" size={20} color={theme.colors.textSecondary} />} onPress={() => { setActionsOpen(false); router.push(`/student-edit?id=${student.id}` as never); }} />
+              </Card>
             </View>
-          </>
-        ) : null}
+          ) : null}
+        </View>
+      )}
+    >
+      <View style={{ paddingTop: theme.space[8], gap: theme.space[16] }}>
+        <Card
+          variant="raised"
+          style={{
+            backgroundColor: theme.colors.surface,
+            borderColor: theme.colors.primaryBorder,
+          }}
+        >
+          <View style={{ gap: theme.space[16] }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.space[16] }}>
+              <View
+                style={{
+                  width: 88,
+                  height: 88,
+                  borderRadius: 44,
+                  backgroundColor: theme.colors.surface,
+                  borderWidth: 1,
+                  borderColor: theme.colors.primaryBorder,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Avatar {...avatar} size="lg" />
+              </View>
+              <View style={{ flex: 1, gap: theme.space[8] }}>
+                <Text token="h1" numberOfLines={2}>{student.nickname}</Text>
+                <Chip variant="status" tone={STATUS_TONE[student.status]} label={STATUS_LABEL[student.status]} />
+              </View>
+            </View>
 
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.space[16], paddingVertical: theme.space[8] }}>
-          <View
-            style={{
-              width: 88,
-              height: 88,
-              borderRadius: 44,
-              backgroundColor: theme.colors.primarySubtle,
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Avatar {...avatar} size="lg" />
-          </View>
-          <View style={{ flex: 1, gap: theme.space[4] }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.space[8], flexWrap: 'wrap' }}>
-              <Text token="h1">{student.nickname}</Text>
-              <Chip variant="status" tone={STATUS_TONE[student.status]} label={STATUS_LABEL[student.status]} />
+            <View style={{ flexDirection: 'row', gap: theme.space[8] }}>
+              <View
+                style={{
+                  flex: 1,
+                  minHeight: 58,
+                  padding: theme.space[8],
+                  borderRadius: theme.radius.md,
+                  backgroundColor: theme.colors.surface,
+                  borderWidth: 0.5,
+                  borderColor: theme.colors.borderDefault,
+                  gap: theme.space[2],
+                }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.space[4] }}>
+                  <Ionicons name="school-outline" size={15} color={theme.colors.primary} />
+                  <Text token="micro" color={theme.colors.textMuted}>GRADE LEVEL</Text>
+                </View>
+                <Text token="bodyStrong" numberOfLines={1}>{student.gradeLevel || 'Not set'}</Text>
+              </View>
+              <View
+                style={{
+                  flex: 1,
+                  minHeight: 58,
+                  padding: theme.space[8],
+                  borderRadius: theme.radius.md,
+                  backgroundColor: theme.colors.surface,
+                  borderWidth: 0.5,
+                  borderColor: theme.colors.borderDefault,
+                  gap: theme.space[2],
+                }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.space[4] }}>
+                  <Ionicons name="calendar-outline" size={15} color={theme.colors.info} />
+                  <Text token="micro" color={theme.colors.textMuted}>AGE</Text>
+                </View>
+                <Text token="bodyStrong">{student.birthday ? `${ageFromBirthday(student.birthday)} years old` : 'Not set'}</Text>
+              </View>
             </View>
-            <Text token="body" color={theme.colors.textSecondary}>
-              {student.gradeLevel || 'Grade not set'}
-              {student.birthday ? `  ·  Age ${ageFromBirthday(student.birthday)}` : ''}
-            </Text>
-            <Text token="body" color={theme.colors.textSecondary} numberOfLines={1}>
-              {student.school || 'School not set'}
-            </Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.space[8], marginTop: theme.space[4] }}>
+
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: theme.space[8],
+                padding: theme.space[12],
+                borderRadius: theme.radius.md,
+                backgroundColor: theme.colors.surface,
+                borderWidth: 0.5,
+                borderColor: theme.colors.borderDefault,
+              }}
+            >
+              <Ionicons name="business-outline" size={20} color={theme.colors.warning} />
+              <View style={{ flex: 1, gap: theme.space[2] }}>
+                <Text token="micro" color={theme.colors.textMuted}>SCHOOL</Text>
+                <Text token="bodyStrong" numberOfLines={2}>{student.school || 'School not set'}</Text>
+              </View>
+            </View>
+
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.space[8] }}>
               {latestSession?.subject ? <Chip variant="status" tone="info" label={latestSession.subject} /> : null}
               <Chip variant="status" tone="neutral" label={`${formatPeso(student.defaultRate)}${student.rateType === 'hourly' ? '/hr' : '/session'}`} />
             </View>
           </View>
-        </View>
+        </Card>
 
         <InfoCard icon="people-outline" title="Parent contact">
           <View style={{ gap: theme.space[2] }}>
@@ -455,11 +497,7 @@ export default function StudentDetailScreen() {
                 <View style={{ alignSelf: 'stretch', alignItems: 'stretch' }}>
                   <Button label="Restore student" icon="refresh-outline" variant="secondary" loading={busy} onPress={() => void mutate('restore')} fullWidth />
                 </View>
-              ) : (
-                <View style={{ alignSelf: 'stretch', alignItems: 'stretch' }}>
-                  <Button label="Archive student" icon="archive-outline" variant="secondary" loading={busy} onPress={confirmArchive} fullWidth />
-                </View>
-              )}
+              ) : null}
             </View>
 
             <View style={{ height: 0.5, backgroundColor: theme.colors.borderSubtle, marginVertical: theme.space[4] }} />
@@ -468,8 +506,21 @@ export default function StudentDetailScreen() {
               <Text token="micro" color={theme.colors.dangerText}>DANGER ZONE</Text>
               <View style={{ padding: theme.space[12], borderRadius: theme.radius.md, backgroundColor: theme.colors.dangerSubtle, borderWidth: 0.5, borderColor: theme.colors.dangerBorder, gap: theme.space[8] }}>
                 <Text token="caption" color={theme.colors.dangerText}>Permanent deletion cannot be undone. Existing sessions, expenses, payments and statements will be kept.</Text>
-                <View style={{ alignSelf: 'stretch', alignItems: 'stretch' }}>
-                  <Button label="Delete student permanently" icon="trash-outline" variant="destructive" loading={busy} onPress={confirmPermanentDelete} fullWidth />
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.space[8] }}>
+                  <View style={{ flex: 1 }}>
+                    <Button label="Delete student permanently" icon="trash-outline" variant="destructive" loading={busy} onPress={confirmPermanentDelete} fullWidth />
+                  </View>
+                  {student.status !== 'archived' ? (
+                    <IconButton
+                      icon="archive"
+                      accessibilityLabel="Archive student"
+                      variant="tonal"
+                      color={theme.colors.textPrimary}
+                      size={20}
+                      disabled={busy}
+                      onPress={confirmArchive}
+                    />
+                  ) : null}
                 </View>
               </View>
             </View>
@@ -478,6 +529,23 @@ export default function StudentDetailScreen() {
           </View>
         </Card>
       </View>
+
+      <ConfirmDialog
+        visible={confirmation !== null}
+        title={confirmation === 'archive' ? 'Archive this student?' : 'Delete student permanently?'}
+        message={confirmation === 'archive'
+          ? 'Their sessions, expenses and statements will be kept. You can restore this student later.'
+          : 'The student profile and avatar will be deleted forever. Existing sessions, expenses, payments and statements will be kept as historical records.'}
+        confirmLabel={confirmation === 'archive' ? 'Archive student' : 'Delete permanently'}
+        icon={confirmation === 'archive' ? 'archive' : 'trash-outline'}
+        onCancel={() => setConfirmation(null)}
+        onConfirm={() => {
+          const action = confirmation;
+          setConfirmation(null);
+          if (action === 'archive') void mutate('archive');
+          if (action === 'delete') void deletePermanently();
+        }}
+      />
     </Screen>
   );
 }

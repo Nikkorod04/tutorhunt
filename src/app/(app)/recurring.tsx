@@ -1,5 +1,5 @@
-import { router } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import React, { useCallback, useState } from 'react';
 import { View } from 'react-native';
 
 import { Badge, Button, Card, Chip, EmptyState, Screen, Skeleton, Text, TopAppBar } from '@/components/ui';
@@ -59,7 +59,11 @@ export default function RecurringSessionsScreen() {
     }
   }, [profile]);
 
-  useEffect(() => { void load(); }, [load]);
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load]),
+  );
 
   if (loading) {
     return (

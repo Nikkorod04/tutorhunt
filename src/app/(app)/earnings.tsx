@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
+import React, { useCallback, useState } from 'react';
+import { Pressable, RefreshControl, View } from 'react-native';
 
 import {
   Button,
@@ -68,11 +68,22 @@ export default function EarningsScreen() {
     }
   }, [profile, month]);
 
-  useEffect(() => { void load(); }, [load]);
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load]),
+  );
 
   return (
     <Screen
       scroll
+      refreshControl={(
+        <RefreshControl
+          refreshing={loading && snapshot !== null}
+          onRefresh={() => void load()}
+          tintColor={theme.colors.primary}
+        />
+      )}
       contentStyle={{ paddingBottom: theme.space[64] + theme.space[32] }}
       header={<TopAppBar title="Earnings" />}
       footer={(

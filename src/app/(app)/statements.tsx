@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -12,7 +12,7 @@ import {
   STATEMENT_PAGE_SIZE,
   type StatementPage,
 } from '@/services/statements.service';
-import { listStudents } from '@/services/students.service';
+import { getStudentsByIds } from '@/services/students.service';
 import { useAuthStore } from '@/stores/authStore';
 import { useTheme } from '@/theme';
 import type { Statement } from '@/types';
@@ -30,27 +30,38 @@ export default function StatementsScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [studentNames, setStudentNames] = useState<Record<string, string>>({});
+
+  const hydrateStudentNames = useCallback(async (statements: Statement[]) => {
+    if (!profile) return;
+    const students = await getStudentsByIds(profile.uid, statements.map((statement) => statement.studentId));
+    setStudentNames((current) => ({
+      ...current,
+      ...Object.fromEntries(students.map((student) => [student.id, student.nickname])),
+    }));
+  }, [profile]);
+
   const loadFirst = useCallback(async () => {
     if (!profile) return;
     setLoading(true);
     setError(null);
     try {
-      const [page, students] = await Promise.all([
-        listStatements(profile.uid, null, STATEMENT_PAGE_SIZE),
-        listStudents(profile.uid, { pageSize: 100 }),
-      ]);
+      const page = await listStatements(profile.uid, null, STATEMENT_PAGE_SIZE);
       setItems(page.items);
       setCursor(page.cursor);
       setHasMore(page.hasMore);
-      setStudentNames(Object.fromEntries(students.items.map((student) => [student.id, student.nickname])));
+      await hydrateStudentNames(page.items);
     } catch (caught) {
       setError(statementErrorMessage(caught));
     } finally {
       setLoading(false);
     }
-  }, [profile]);
+  }, [profile, hydrateStudentNames]);
 
-  useEffect(() => { void loadFirst(); }, [loadFirst]);
+  useFocusEffect(
+    useCallback(() => {
+      void loadFirst();
+    }, [loadFirst]),
+  );
 
   async function loadMore() {
     if (!profile || !cursor || !hasMore || loadingMore) return;
@@ -60,6 +71,7 @@ export default function StatementsScreen() {
       setItems((current) => [...current, ...page.items]);
       setCursor(page.cursor);
       setHasMore(page.hasMore);
+      await hydrateStudentNames(page.items);
     } catch (caught) {
       setError(statementErrorMessage(caught));
     } finally {

@@ -50,6 +50,7 @@ export default function SessionDetailScreen() {
     if (!profile || !id) { setLoading(false); return; }
     try {
       const found = await getSession(profile.uid, id);
+      setError(null);
       setSession(found);
       if (found) setStudent(await getStudent(profile.uid, found.studentId));
     } catch (caught) { setError(sessionErrorMessage(caught)); }
@@ -68,7 +69,7 @@ export default function SessionDetailScreen() {
   }, []);
 
   async function markCompleted() {
-    if (!profile || !session || busy || session.status !== 'scheduled') return;
+    if (!profile || !session || busy || session.status !== 'scheduled' || !beginSubmit()) return;
     setBusy(true);
     setError(null);
     try {
@@ -82,6 +83,7 @@ export default function SessionDetailScreen() {
       setError(message);
       showToast(message, 'danger');
     } finally {
+      endSubmit();
       setBusy(false);
     }
   }
@@ -120,7 +122,12 @@ export default function SessionDetailScreen() {
     return (
       <Screen scroll>
         <View style={{ paddingTop: theme.space[32] }}>
-          <EmptyState icon="alert-circle-outline" title="Session not found" description="It may have been deleted, or the link is out of date." />
+          <EmptyState
+            icon="alert-circle-outline"
+            title="Session not found"
+            description={error ?? 'It may have been deleted, or the link is out of date.'}
+            action={<Button label="Try again" icon="refresh-outline" variant="secondary" onPress={() => void load()} />}
+          />
         </View>
       </Screen>
     );
@@ -172,7 +179,7 @@ export default function SessionDetailScreen() {
               {isOverdue || isOngoing ? (
                 <View style={{ flexDirection: 'row', gap: theme.space[8], marginTop: theme.space[4] }}>
                   <View style={{ flex: 1 }}><Button label="Mark completed" loading={busy} onPress={() => void markCompleted()} fullWidth /></View>
-                  <View style={{ flex: 1 }}><Button label="Reschedule" variant="secondary" disabled={busy} onPress={() => router.push({ pathname: '/session-new', params: { rescheduleFrom: session.id, studentId: session.studentId } } as never)} fullWidth /></View>
+                  <View style={{ flex: 1 }}><Button label="Reschedule" variant="secondary" disabled={busy} onPress={() => router.push({ pathname: '/session-new', params: { sessionId: session.id } } as never)} fullWidth /></View>
                 </View>
               ) : null}
             </View>
@@ -233,30 +240,16 @@ export default function SessionDetailScreen() {
           </RecordDetailSection>
         ) : null}
 
-        {session.status === 'rescheduled' && session.rescheduledToId ? (
-          <Card variant="raised" style={{ backgroundColor: theme.colors.infoSubtle, borderColor: theme.colors.infoBorder }}>
-            <View style={{ gap: theme.space[12] }}>
-              <View style={{ gap: theme.space[4] }}>
-                <Text token="h3">This session was rescheduled</Text>
-                <Text token="caption" color={theme.colors.textMuted}>View the replacement session to see the updated schedule.</Text>
-              </View>
-              <Button label="View replacement" icon="calendar-outline" variant="secondary" onPress={() => router.push({ pathname: '/session-detail', params: { id: session.rescheduledToId! } } as never)} fullWidth />
-            </View>
-          </Card>
-        ) : null}
-
         <Card variant="raised">
           <View style={{ gap: theme.space[12] }}>
             <View style={{ gap: theme.space[4] }}>
               <Text token="h3">Manage session</Text>
-              <Text token="caption" color={theme.colors.textMuted}>Update the record or plan a replacement when needed.</Text>
+              <Text token="caption" color={theme.colors.textMuted}>Update the record or move it to another schedule.</Text>
             </View>
-            {session.status !== 'rescheduled' ? (
-              <View style={{ flexDirection: 'row', gap: theme.space[8] }}>
-                <View style={{ flex: 1 }}><Button label="Edit" icon="create-outline" variant="secondary" onPress={() => router.push({ pathname: '/session-edit', params: { id: session.id } } as never)} fullWidth /></View>
-                {session.status === 'scheduled' ? <View style={{ flex: 1 }}><Button label="Reschedule" icon="calendar-outline" variant="secondary" onPress={() => router.push({ pathname: '/session-new', params: { rescheduleFrom: session.id, studentId: session.studentId } } as never)} fullWidth /></View> : null}
-              </View>
-            ) : null}
+            <View style={{ flexDirection: 'row', gap: theme.space[8] }}>
+              <View style={{ flex: 1 }}><Button label="Edit" icon="create-outline" variant="secondary" onPress={() => router.push({ pathname: '/session-edit', params: { id: session.id } } as never)} fullWidth /></View>
+              {session.status === 'scheduled' ? <View style={{ flex: 1 }}><Button label="Reschedule" icon="calendar-outline" variant="secondary" onPress={() => router.push({ pathname: '/session-new', params: { sessionId: session.id } } as never)} fullWidth /></View> : null}
+            </View>
             <Button label="Delete session" icon="trash-outline" variant="destructive" loading={busy} onPress={confirmDelete} fullWidth />
           </View>
         </Card>

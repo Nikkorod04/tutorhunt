@@ -11,6 +11,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  documentId,
   getCountFromServer,
   getDoc,
   getDocs,
@@ -32,6 +33,7 @@ import { isStudentAvatarId } from '@/constants/avatars';
 import { limitsFor } from '@/constants/plans';
 import { getDb, getFileStorage } from './firebase';
 import type { Plan, RateType, Student, StudentAvatarId, StudentGender, StudentStatus } from '@/types';
+import { dataErrorMessage } from '@/utils/error-message';
 
 export const STUDENT_PAGE_SIZE = 10;
 
@@ -193,6 +195,27 @@ export async function getStudent(tutorUid: string, studentId: string): Promise<S
   const snapshot = await getDoc(doc(getDb(), 'users', tutorUid, 'students', studentId));
   if (!snapshot.exists()) return null;
   return mapStudent(snapshot.id, snapshot.data());
+}
+
+/**
+ * Fetches a small set of students in batches. Screens that render records
+ * such as sessions should use this instead of issuing one document read per
+ * visible row.
+ */
+export async function getStudentsByIds(tutorUid: string, studentIds: string[]): Promise<Student[]> {
+  const uniqueIds = [...new Set(studentIds.filter(Boolean))];
+  if (uniqueIds.length === 0) return [];
+
+  const chunks: string[][] = [];
+  for (let index = 0; index < uniqueIds.length; index += 30) {
+    chunks.push(uniqueIds.slice(index, index + 30));
+  }
+
+  const snapshots = await Promise.all(
+    chunks.map((ids) => getDocs(query(studentsCol(tutorUid), where(documentId(), 'in', ids)))),
+  );
+
+  return snapshots.flatMap((snapshot) => snapshot.docs.map((item) => mapStudent(item.id, item.data())));
 }
 
 // ---------------------------------------------------------------------------
@@ -377,6 +400,5 @@ export async function setStudentInactive(tutorUid: string, studentId: string): P
 
 export function studentErrorMessage(error: unknown): string {
   if (error instanceof StudentLimitError) return error.message;
-  if (error instanceof Error && error.message) return error.message;
-  return 'Something went wrong. Please try again.';
+  return dataErrorMessage(error, 'Something went wrong. Please try again.');
 }

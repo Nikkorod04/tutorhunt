@@ -28,6 +28,7 @@ import type {
 import { limitsFor } from '@/constants/plans';
 import { expenseTotal, roundCurrency } from '@/utils/pricing';
 import { getDb } from './firebase';
+import { dataErrorMessage } from '@/utils/error-message';
 
 export const EXPENSE_PAGE_SIZE = 10;
 const REIMBURSEMENT_ORDER: ReimbursementStatus[] = [
@@ -206,8 +207,7 @@ export async function updateReimbursementStatus(
 }
 
 export function expenseErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message) return error.message;
-  return 'Could not update the expense. Please try again.';
+  return dataErrorMessage(error, 'Could not update the expense. Please try again.');
 }
 
 export function expenseTotalForDisplay(expense: Pick<Expense, 'amountPerOccurrence' | 'expenseDates'>): number {

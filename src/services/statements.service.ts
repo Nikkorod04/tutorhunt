@@ -31,6 +31,7 @@ import { listAllExpenses } from './expenses.service';
 import { listAllPayments } from './payments.service';
 import { listAllSessions } from './sessions.service';
 import { getDb } from './firebase';
+import { dataErrorMessage } from '@/utils/error-message';
 
 export const STATEMENT_PAGE_SIZE = 10;
 
@@ -514,6 +515,5 @@ export async function getStatement(tutorUid: string, statementId: string): Promi
 }
 
 export function statementErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message) return error.message;
-  return 'Could not generate the statement. Please try again.';
+  return dataErrorMessage(error, 'Could not generate the statement. Please try again.');
 }

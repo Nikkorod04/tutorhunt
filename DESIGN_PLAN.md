@@ -145,7 +145,6 @@ Sessions
 | cancelled_by_tutor | neutral | Cancelled by you |
 | cancelled_by_parent | warning | Cancelled by parent |
 | student_absent | danger | Student absent |
-| rescheduled | premium | Rescheduled |
 
 Payments and money
 | State | Tone | Label |

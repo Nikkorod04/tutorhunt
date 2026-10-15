@@ -20,6 +20,7 @@ import { addCalendarMonths, generateRecurringDates, MAX_RECURRING_MONTHS, MAX_RE
 import { parseClockTime } from '@/utils/validation';
 import { deriveSessionInput, type SessionInput } from './sessions.service';
 import { getDb } from './firebase';
+import { dataErrorMessage } from '@/utils/error-message';
 
 export const RECURRING_PAGE_SIZE = 10;
 
@@ -121,7 +122,6 @@ function sessionDataForDate(input: RecurringSeriesInput, date: Date, seriesId: s
   return {
     id,
     ...deriveSessionInput(sessionInput),
-    rescheduledToId: null,
     recurringGroupId: seriesId,
     recurringSessionModified: false,
     createdAt: serverTimestamp(),
@@ -226,5 +226,5 @@ export async function cancelRecurringSeries(tutorUid: string, plan: Plan | null 
 }
 
 export function recurringErrorMessage(error: unknown): string {
-  return error instanceof Error && error.message ? error.message : 'Could not update the recurring series. Please try again.';
+  return dataErrorMessage(error, 'Could not update the recurring series. Please try again.');
 }

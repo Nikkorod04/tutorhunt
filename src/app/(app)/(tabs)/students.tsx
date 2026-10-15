@@ -7,9 +7,10 @@
  */
 
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   Avatar,
@@ -65,6 +66,7 @@ function subtitleFor(student: Student): string {
 
 export default function StudentsScreen() {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const profile = useAuthStore((state) => state.profile);
   const entitlement = useAuthStore((state) => state.entitlement);
   const limits = limitsFor(activePlanFor(entitlement));
@@ -106,9 +108,11 @@ export default function StudentsScreen() {
     }
   }, [profile, filter, setLoading, setError, setPage]);
 
-  useEffect(() => {
-    void loadFirstPage();
-  }, [loadFirstPage]);
+  useFocusEffect(
+    useCallback(() => {
+      void loadFirstPage();
+    }, [loadFirstPage]),
+  );
 
   const loadMore = useCallback(async () => {
     if (!profile || !cursor || !hasMore || loading || loadingMore) return;
@@ -243,13 +247,6 @@ export default function StudentsScreen() {
                   icon="people-outline"
                   title={search ? 'No matching students' : 'No students yet'}
                   description={search ? 'Try a different name, school or grade.' : 'Add your first tutee to begin tracking sessions.'}
-                  action={
-                    <Button
-                      label="Add student"
-                      disabled={atCap}
-                      onPress={() => router.push('/student-new' as never)}
-                    />
-                  }
                 />
               </Card>
             )
@@ -263,43 +260,41 @@ export default function StudentsScreen() {
           }
         />
 
-        {items.length > 0 ? (
-          <View
-            pointerEvents="box-none"
-            style={{
-              position: 'absolute',
-              left: 0,
-              right: 0,
-              bottom: theme.space[16],
-              paddingHorizontal: theme.layout.screenPadding,
-              alignItems: 'flex-end',
-            }}
+        <View
+          pointerEvents="box-none"
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            bottom: theme.space[16] + insets.bottom,
+            paddingHorizontal: theme.layout.screenPadding,
+            alignItems: 'flex-end',
+          }}
+        >
+          <Pressable
+            onPress={() => router.push('/student-new' as never)}
+            disabled={atCap}
+            accessibilityRole="button"
+            accessibilityLabel="Add student"
+            accessibilityState={{ disabled: atCap }}
+            style={({ pressed }) => ({
+              width: 56,
+              height: 56,
+              borderRadius: 28,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: atCap ? theme.colors.surfaceSunken : theme.colors.primary,
+              opacity: pressed ? 0.82 : atCap ? 0.55 : 1,
+              elevation: 4,
+              shadowColor: theme.colors.textPrimary,
+              shadowOpacity: 0.18,
+              shadowRadius: 8,
+              shadowOffset: { width: 0, height: 3 },
+            })}
           >
-            <Pressable
-              onPress={() => router.push('/student-new' as never)}
-              disabled={atCap}
-              accessibilityRole="button"
-              accessibilityLabel="Add student"
-              accessibilityState={{ disabled: atCap }}
-              style={({ pressed }) => ({
-                width: 56,
-                height: 56,
-                borderRadius: 28,
-                alignItems: 'center',
-                justifyContent: 'center',
-                backgroundColor: atCap ? theme.colors.surfaceSunken : theme.colors.primary,
-                opacity: pressed ? 0.82 : atCap ? 0.55 : 1,
-                elevation: 4,
-                shadowColor: theme.colors.textPrimary,
-                shadowOpacity: 0.18,
-                shadowRadius: 8,
-                shadowOffset: { width: 0, height: 3 },
-              })}
-            >
-              <Ionicons name="add" size={28} color={atCap ? theme.colors.textMuted : theme.colors.textOnPrimary} />
-            </Pressable>
-          </View>
-        ) : null}
+            <Ionicons name="add" size={28} color={atCap ? theme.colors.textMuted : theme.colors.textOnPrimary} />
+          </Pressable>
+        </View>
       </View>
     </Screen>
   );

@@ -51,6 +51,7 @@ export default function RecurringDetailScreen() {
 
     try {
       const found = await getRecurringSeries(profile.uid, id);
+      setError(null);
       setSeries(found);
       if (found) {
         const page = await listStudents(profile.uid, { pageSize: 100 });
@@ -129,7 +130,12 @@ export default function RecurringDetailScreen() {
     return (
       <Screen scroll>
         <View style={{ paddingTop: theme.space[32] }}>
-          <EmptyState icon="alert-circle-outline" title="Series not found" description={error ?? 'This series may have been removed.'} />
+          <EmptyState
+            icon="alert-circle-outline"
+            title="Series not found"
+            description={error ?? 'This series may have been removed.'}
+            action={<Button label="Try again" icon="refresh-outline" variant="secondary" onPress={() => void load()} />}
+          />
         </View>
       </Screen>
     );

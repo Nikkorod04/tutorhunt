@@ -333,12 +333,7 @@ export function StudentForm({
             maximumDate={new Date()}
             pickerOnly
           />
-        </View>
-      </Card>
 
-      <Card variant="raised">
-        <SectionHeader title="School" />
-        <View style={{ gap: theme.space[16] }}>
           <TextField
             label="School"
             value={values.school}
@@ -401,7 +396,7 @@ export function StudentForm({
       </Card>
 
       <Card variant="raised">
-        <SectionHeader title="Tutoring" />
+        <SectionHeader title="Place and Rate" />
         <View style={{ gap: theme.space[16] }}>
           <TextField
             label="Tutoring place"
@@ -449,7 +444,6 @@ export function StudentForm({
       </Card>
 
       <Card variant="raised">
-        <SectionHeader title="Notes" />
         <TextField
           label="Notes"
           inputRef={notesRef}

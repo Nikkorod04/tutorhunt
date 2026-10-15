@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { Pressable, RefreshControl, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import {
@@ -9,7 +9,6 @@ import {
   Button,
   Card,
   EmptyState,
-  IconButton,
   Screen,
   SectionHeader,
   Skeleton,
@@ -31,6 +30,7 @@ import {
   markNotificationRead,
   notificationErrorMessage,
 } from '@/services/notifications.service';
+import { invalidateNotificationBadge } from '@/services/notification-badge.service';
 import { formatDisplayDateTime } from '@/utils/date';
 
 function notificationIcon(type: AppNotification['type']): 'calendar-outline' | 'star-outline' | 'information-circle-outline' {
@@ -159,6 +159,7 @@ export default function NotificationsScreen() {
     if (item.readAt === null) {
       try {
         await markNotificationRead(profile.uid, item.id);
+        invalidateNotificationBadge(profile.uid);
         setItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, readAt: new Date() } : entry));
       } catch {
         // Opening the destination is still useful if marking read fails.
@@ -172,6 +173,7 @@ export default function NotificationsScreen() {
     if (item.readAt === null) {
       try {
         await markAnnouncementRead(profile.uid, item.id);
+        invalidateNotificationBadge(profile.uid);
         setAnnouncements((current) => current.map((entry) => entry.id === item.id ? { ...entry, readAt: new Date() } : entry));
       } catch {
         // The announcement remains readable if marking it read fails.
@@ -184,6 +186,7 @@ export default function NotificationsScreen() {
     if (!profile || items.every((item) => item.readAt !== null) && announcements.every((item) => item.readAt !== null)) return;
     try {
       await Promise.all([markAllNotificationsRead(profile.uid), markAllAnnouncementsRead(profile.uid)]);
+      invalidateNotificationBadge(profile.uid);
       setItems((current) => current.map((item) => ({ ...item, readAt: item.readAt ?? new Date() })));
       setAnnouncements((current) => current.map((item) => ({ ...item, readAt: item.readAt ?? new Date() })));
       showToast('All notifications marked as read');
@@ -201,23 +204,19 @@ export default function NotificationsScreen() {
     <Screen
       scroll
       contentStyle={{ paddingBottom: theme.space[16] }}
+      refreshControl={(
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={() => void load(true)}
+          tintColor={theme.colors.primary}
+          colors={[theme.colors.primary]}
+        />
+      )}
       header={(
         <TopAppBar
           title="Notifications"
           onBack={() => router.back()}
-          action={(
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.space[4] }}>
-              {unreadCount > 0 ? <Badge label={`${unreadCount} new`} tone="info" /> : null}
-              <IconButton
-                icon="refresh-outline"
-                accessibilityLabel="Refresh notifications"
-                onPress={() => void load(true)}
-                disabled={refreshing}
-                color={theme.colors.textOnPrimary}
-                pressedBackgroundColor={theme.colors.primaryPressed}
-              />
-            </View>
-          )}
+          action={unreadCount > 0 ? <Badge label={`${unreadCount} new`} tone="info" /> : undefined}
         />
       )}
     >

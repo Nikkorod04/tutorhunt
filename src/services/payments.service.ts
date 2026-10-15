@@ -22,6 +22,7 @@ import {
 import type { Payment, PaymentMethod } from '@/types';
 import { roundCurrency } from '@/utils/pricing';
 import { getDb } from './firebase';
+import { dataErrorMessage } from '@/utils/error-message';
 
 export const PAYMENT_PAGE_SIZE = 10;
 
@@ -152,6 +153,5 @@ export async function deletePayment(tutorUid: string, paymentId: string): Promis
 }
 
 export function paymentErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message) return error.message;
-  return 'Could not update the payment. Please try again.';
+  return dataErrorMessage(error, 'Could not update the payment. Please try again.');
 }

@@ -39,6 +39,7 @@ export default function PaymentDetailScreen() {
     if (!profile || !id) { setLoading(false); return; }
     try {
       const found = await getPayment(profile.uid, id);
+      setError(null);
       setPayment(found);
       if (found) setStudent(await getStudent(profile.uid, found.studentId));
     } catch (caught) { setError(paymentErrorMessage(caught)); }
@@ -86,7 +87,12 @@ export default function PaymentDetailScreen() {
     return (
       <Screen scroll>
         <View style={{ paddingTop: theme.space[32] }}>
-          <EmptyState icon="alert-circle-outline" title="Payment not found" description={error ?? 'It may have been deleted, or the link is out of date.'} />
+          <EmptyState
+            icon="alert-circle-outline"
+            title="Payment not found"
+            description={error ?? 'It may have been deleted, or the link is out of date.'}
+            action={<Button label="Try again" icon="refresh-outline" variant="secondary" onPress={() => void load()} />}
+          />
         </View>
       </Screen>
     );

@@ -5,6 +5,7 @@ import { View } from 'react-native';
 
 import {
   Badge,
+  Button,
   Card,
   EmptyState,
   Screen,
@@ -14,6 +15,7 @@ import {
   useToast,
 } from '@/components/ui';
 import { getAnnouncement, markAnnouncementRead } from '@/services/announcements.service';
+import { invalidateNotificationBadge } from '@/services/notification-badge.service';
 import { useAuthStore } from '@/stores/authStore';
 import { useTheme } from '@/theme';
 import type { UserAnnouncement } from '@/types';
@@ -87,6 +89,7 @@ export default function AnnouncementDetailScreen() {
       setError(next ? null : 'This announcement is no longer available.');
       if (next && next.readAt === null) {
         await markAnnouncementRead(profile.uid, id);
+        invalidateNotificationBadge(profile.uid);
         setAnnouncement({ ...next, readAt: new Date() });
       }
     } catch {
@@ -124,7 +127,12 @@ export default function AnnouncementDetailScreen() {
             </View>
           </Card>
         ) : error || !announcement ? (
-          <EmptyState icon="megaphone-outline" title="Announcement unavailable" description={error ?? 'This announcement could not be found.'} />
+          <EmptyState
+            icon="megaphone-outline"
+            title="Announcement unavailable"
+            description={error ?? 'This announcement could not be found.'}
+            action={<Button label="Try again" icon="refresh-outline" variant="secondary" onPress={() => void load()} />}
+          />
         ) : (
           <>
             <Card variant="raised">

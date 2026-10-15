@@ -5,7 +5,8 @@ import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, Vie
 
 import { Avatar, Button, Card, Chip, EmptyState, Screen, SessionStatusChip, Text, TopAppBar, useToast } from '@/components/ui';
 import { NotificationBell } from '@/components/NotificationBell';
-import { getStudent } from '@/services/students.service';
+import { useSubmitGuard } from '@/hooks/useSubmitGuard';
+import { getStudentsByIds } from '@/services/students.service';
 import { listSessions, SESSION_PAGE_SIZE, sessionErrorMessage, updateSessionStatus } from '@/services/sessions.service';
 import { useAuthStore } from '@/stores/authStore';
 import { useSessionStore } from '@/stores/sessionStore';
@@ -22,7 +23,6 @@ const FILTERS: { value: SessionStatus | undefined; label: string }[] = [
   { value: 'student_absent', label: 'Absent' },
   { value: 'cancelled_by_parent', label: 'Parent cancelled' },
   { value: 'cancelled_by_tutor', label: 'I cancelled' },
-  { value: 'rescheduled', label: 'Rescheduled' },
 ];
 
 export default function SessionsScreen() {
@@ -31,6 +31,7 @@ export default function SessionsScreen() {
   const profile = useAuthStore((state) => state.profile);
   const store = useSessionStore();
   const { showToast } = useToast();
+  const { beginSubmit, endSubmit } = useSubmitGuard();
   const [studentsById, setStudentsById] = useState<Record<string, Student>>({});
   const [now, setNow] = useState(() => new Date());
   const [busySessionId, setBusySessionId] = useState<string | null>(null);
@@ -39,10 +40,10 @@ export default function SessionsScreen() {
     if (!profile) return;
     const ids = [...new Set(sessions.map((item) => item.studentId))];
     if (ids.length === 0) return;
-    const students = await Promise.all(ids.map((id) => getStudent(profile.uid, id)));
+    const students = await getStudentsByIds(profile.uid, ids);
     setStudentsById((current) => {
       const next = { ...current };
-      students.forEach((student) => { if (student) next[student.id] = student; });
+      students.forEach((student) => { next[student.id] = student; });
       return next;
     });
   }, [profile]);
@@ -99,7 +100,7 @@ export default function SessionsScreen() {
   }, []);
 
   async function markSessionCompleted(session: Session) {
-    if (!profile || busySessionId) return;
+    if (!profile || busySessionId || !beginSubmit()) return;
     setBusySessionId(session.id);
     try {
       await updateSessionStatus(profile.uid, session.id, 'completed');
@@ -114,6 +115,7 @@ export default function SessionsScreen() {
       store.setError(message);
       showToast(message, 'danger');
     } finally {
+      endSubmit();
       setBusySessionId(null);
     }
   }
@@ -158,7 +160,7 @@ export default function SessionsScreen() {
               now={now}
               busy={busySessionId === item.id}
               onMarkCompleted={() => void markSessionCompleted(item)}
-              onReschedule={() => router.push({ pathname: '/session-new', params: { rescheduleFrom: item.id, studentId: item.studentId } } as never)}
+              onReschedule={() => router.push({ pathname: '/session-new', params: { sessionId: item.id } } as never)}
               onPress={() => router.push({ pathname: '/session-detail', params: { id: item.id } } as never)}
             />
           )}

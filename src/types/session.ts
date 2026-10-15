@@ -13,8 +13,7 @@ export type SessionStatus =
   | 'completed'
   | 'cancelled_by_tutor'
   | 'cancelled_by_parent'
-  | 'student_absent'
-  | 'rescheduled';
+  | 'student_absent';
 
 export type TopicCategory =
   | 'assignment'
@@ -42,7 +41,6 @@ export interface Session {
   /** Tutor override allowing a no-show or late cancellation to be charged. */
   billable: boolean;
   status: SessionStatus;
-  rescheduledToId: string | null;
   recurringGroupId: string | null;
   /** True when a tutor manually edited a generated session. */
   recurringSessionModified: boolean;

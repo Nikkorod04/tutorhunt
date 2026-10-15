@@ -3,8 +3,7 @@ import React, { useCallback, useState } from 'react';
 import { View } from 'react-native';
 
 import { IconButton } from '@/components/ui';
-import { listAnnouncements } from '@/services/announcements.service';
-import { listNotifications } from '@/services/notifications.service';
+import { getNotificationBadgeState } from '@/services/notification-badge.service';
 import { useAuthStore } from '@/stores/authStore';
 import { useTheme } from '@/theme';
 
@@ -21,11 +20,7 @@ export function NotificationBell() {
     }
 
     try {
-      const [items, announcements] = await Promise.all([
-        listNotifications(profile.uid),
-        listAnnouncements(profile.uid),
-      ]);
-      setHasUnread(items.some((item) => item.readAt === null) || announcements.some((item) => item.readAt === null));
+      setHasUnread(await getNotificationBadgeState(profile.uid));
     } catch {
       // The bell remains usable even when notification history is temporarily unavailable.
     }

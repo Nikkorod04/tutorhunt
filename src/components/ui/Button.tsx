@@ -171,19 +171,26 @@ export function Button({
         testID={testID}
         hitSlop={size === 'sm' ? { top: 4, bottom: 4, left: 0, right: 0 } : undefined}
         style={{
+          width: fullWidth ? '100%' : undefined,
           height: sizeSpec.height,
           paddingHorizontal: sizeSpec.paddingHorizontal,
           borderRadius: theme.radius.md,
           borderWidth: colors.borderWidth,
           borderColor: colors.borderColor,
           backgroundColor: colors.background,
+          flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'center',
+          position: 'relative',
         }}
       >
         <View
           collapsable={false}
-          style={[styles.row, { gap: sizeSpec.gap, opacity: loading ? 0 : 1 }]}
+          style={[
+            styles.row,
+            fullWidth ? styles.fullWidthRow : null,
+            { gap: sizeSpec.gap, opacity: loading ? 0 : 1 },
+          ]}
         >
           {iconPosition === 'leading' ? glyph : null}
           <Text style={labelStyle} color={colors.label}>
@@ -203,7 +210,8 @@ export function Button({
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center' },
+  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  fullWidthRow: { flex: 1 },
   overlay: {
     position: 'absolute',
     top: 0,

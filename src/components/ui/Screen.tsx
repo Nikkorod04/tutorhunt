@@ -5,7 +5,7 @@
  * canvas is never pure white (DESIGN_PLAN section 10, rule 1).
  */
 
-import React, { type ReactNode, useEffect, useState } from 'react';
+import React, { type ReactElement, type ReactNode, useEffect, useState } from 'react';
 import {
   Keyboard,
   KeyboardAvoidingView,
@@ -13,6 +13,7 @@ import {
   ScrollView,
   StyleSheet,
   View,
+  type RefreshControlProps,
   type ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -29,6 +30,8 @@ export interface ScreenProps {
   header?: ReactNode;
   /** Pinned above the safe area, outside the scroll area. */
   footer?: ReactNode;
+  /** Pull-to-refresh control for scrollable screens. */
+  refreshControl?: ReactElement<RefreshControlProps>;
   style?: ViewStyle;
   contentStyle?: ViewStyle;
 }
@@ -39,6 +42,7 @@ export function Screen({
   padded = true,
   header,
   footer,
+  refreshControl,
   style,
   contentStyle,
 }: ScreenProps) {
@@ -64,7 +68,16 @@ export function Screen({
 
   return (
     <View style={[styles.root, { backgroundColor: theme.colors.canvas }, style]}>
-      <View style={{ paddingTop: insets.top }}>{header}</View>
+      <View
+        style={{
+          paddingTop: insets.top,
+          position: 'relative',
+          zIndex: 20,
+          overflow: 'visible',
+        }}
+      >
+        {header}
+      </View>
 
       <KeyboardAvoidingView
         style={styles.flex}
@@ -85,6 +98,7 @@ export function Screen({
             keyboardShouldPersistTaps="always"
             keyboardDismissMode="none"
             showsVerticalScrollIndicator={false}
+            refreshControl={refreshControl}
           >
             {children}
           </ScrollView>

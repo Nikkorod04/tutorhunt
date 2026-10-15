@@ -158,7 +158,7 @@ export function SessionForm({
   const [topicCategory, setTopicCategory] = useState<TopicCategory>(initial?.topicCategory ?? 'assignment');
   const [rateType, setRateType] = useState<RateType>(initial?.rateType ?? startingStudent?.rateType ?? 'hourly');
   const [status, setStatus] = useState<EditableSessionStatus>(
-    initial?.status === 'rescheduled' ? 'scheduled' : initial?.status ?? 'scheduled',
+    initial?.status ?? 'scheduled',
   );
   const [billable, setBillable] = useState(initial?.billable ?? false);
   const [notes, setNotes] = useState(initial?.notes ?? '');

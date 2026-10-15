@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -12,7 +12,7 @@ import {
   paymentErrorMessage,
   type PaymentPage,
 } from '@/services/payments.service';
-import { getStudent, listStudents } from '@/services/students.service';
+import { getStudentsByIds } from '@/services/students.service';
 import { useAuthStore } from '@/stores/authStore';
 import { useTheme } from '@/theme';
 import type { Payment } from '@/types';
@@ -41,31 +41,37 @@ export default function PaymentsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [studentNames, setStudentNames] = useState<Record<string, string>>({});
   const [studentName, setStudentName] = useState<string | null>(null);
+
+  const hydrateStudentNames = useCallback(async (payments: Payment[]) => {
+    if (!profile) return;
+    const students = await getStudentsByIds(profile.uid, payments.map((payment) => payment.studentId));
+    const names = Object.fromEntries(students.map((student) => [student.id, student.nickname]));
+    setStudentNames((current) => ({ ...current, ...names }));
+    if (studentId) setStudentName(names[studentId] ?? null);
+  }, [profile, studentId]);
+
   const loadFirst = useCallback(async () => {
     if (!profile) return;
     setLoading(true);
     setError(null);
     try {
-      const [page, studentPage] = await Promise.all([
-        listPayments(profile.uid, { studentId, pageSize: PAYMENT_PAGE_SIZE }),
-        listStudents(profile.uid, { pageSize: 100 }),
-      ]);
+      const page = await listPayments(profile.uid, { studentId, pageSize: PAYMENT_PAGE_SIZE });
       setItems(page.items);
       setCursor(page.cursor);
       setHasMore(page.hasMore);
-      setStudentNames(Object.fromEntries(studentPage.items.map((student) => [student.id, student.nickname])));
-      if (studentId) {
-        const student = await getStudent(profile.uid, studentId);
-        setStudentName(student?.nickname ?? null);
-      }
+      await hydrateStudentNames(page.items);
     } catch (caught) {
       setError(paymentErrorMessage(caught));
     } finally {
       setLoading(false);
     }
-  }, [profile, studentId]);
+  }, [profile, studentId, hydrateStudentNames]);
 
-  useEffect(() => { void loadFirst(); }, [loadFirst]);
+  useFocusEffect(
+    useCallback(() => {
+      void loadFirst();
+    }, [loadFirst]),
+  );
 
   async function loadMore() {
     if (!profile || !cursor || !hasMore || loadingMore) return;
@@ -75,6 +81,7 @@ export default function PaymentsScreen() {
       setItems((current) => [...current, ...page.items]);
       setCursor(page.cursor);
       setHasMore(page.hasMore);
+      await hydrateStudentNames(page.items);
     } catch (caught) {
       setError(paymentErrorMessage(caught));
     } finally {

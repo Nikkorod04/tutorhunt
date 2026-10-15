@@ -10,6 +10,7 @@ export { Badge, type BadgeProps, type BadgeVariant } from './Badge';
 export { Button, type ButtonProps, type ButtonSize, type ButtonVariant } from './Button';
 export { Card, type CardProps, type CardVariant } from './Card';
 export { Chip, type ChipProps, type ChipVariant } from './Chip';
+export { ConfirmDialog, type ConfirmDialogProps } from './ConfirmDialog';
 export { DateField, type DateFieldProps } from './DateField';
 export { EmptyState, type EmptyStateProps } from './EmptyState';
 export { IconButton, type IconButtonProps, type IconButtonVariant } from './IconButton';

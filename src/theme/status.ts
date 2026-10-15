@@ -17,7 +17,6 @@ export const sessionStatusTone: Record<SessionStatus, Tone> = {
   cancelled_by_tutor: 'neutral',
   cancelled_by_parent: 'warning',
   student_absent: 'danger',
-  rescheduled: 'premium',
 };
 
 export const sessionStatusLabel: Record<SessionStatus, string> = {
@@ -26,7 +25,6 @@ export const sessionStatusLabel: Record<SessionStatus, string> = {
   cancelled_by_tutor: 'Cancelled by you',
   cancelled_by_parent: 'Cancelled by parent',
   student_absent: 'Student absent',
-  rescheduled: 'Rescheduled',
 };
 
 export const sessionStatusIcon = {
@@ -35,7 +33,6 @@ export const sessionStatusIcon = {
   cancelled_by_tutor: 'close-circle-outline',
   cancelled_by_parent: 'close-circle-outline',
   student_absent: 'alert-circle-outline',
-  rescheduled: 'calendar-outline',
 } as const satisfies Record<SessionStatus, string>;
 
 export const reimbursementStatusTone: Record<Expense['reimbursementStatus'], Tone> = {

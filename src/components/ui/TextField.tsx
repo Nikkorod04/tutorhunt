@@ -45,6 +45,7 @@ export interface TextFieldProps {
   multiline?: boolean;
   keyboardType?: KeyboardTypeOptions;
   autoCapitalize?: TextInputProps['autoCapitalize'];
+  autoCorrect?: TextInputProps['autoCorrect'];
   autoComplete?: TextInputProps['autoComplete'];
   textContentType?: TextInputProps['textContentType'];
   secureTextEntry?: boolean;
@@ -81,6 +82,7 @@ export function TextField({
   multiline = false,
   keyboardType,
   autoCapitalize,
+  autoCorrect,
   autoComplete,
   textContentType,
   secureTextEntry,
@@ -137,9 +139,9 @@ export function TextField({
         >
         <View
           style={{
-            backgroundColor: focused && !error ? theme.colors.primarySubtle : 'transparent',
+            backgroundColor: 'transparent',
             borderRadius: theme.radius.md + 2,
-            padding: focused && !error ? 3 : 0,
+            padding: 0,
           }}
         >
           <View
@@ -176,11 +178,15 @@ export function TextField({
               multiline={multiline}
               keyboardType={keyboardType}
               autoCapitalize={autoCapitalize}
+              autoCorrect={autoCorrect}
               autoComplete={autoComplete}
               textContentType={textContentType}
               secureTextEntry={secureTextEntry}
               maxLength={maxLength}
               autoFocus={autoFocus}
+              underlineColorAndroid="transparent"
+              selectionColor={theme.colors.primary}
+              cursorColor={theme.colors.primary}
               returnKeyType={returnKeyType}
               onSubmitEditing={onSubmitEditing}
               testID={testID}
@@ -190,6 +196,7 @@ export function TextField({
                   flex: 1,
                   minHeight: multiline ? 72 : undefined,
                   alignSelf: multiline ? 'stretch' : undefined,
+                  backgroundColor: 'transparent',
                   color: disabled ? theme.colors.textHint : theme.colors.textPrimary,
                   paddingVertical: multiline ? 0 : compact ? theme.space[4] : theme.space[12],
                   textAlignVertical: multiline ? 'top' : 'center',
