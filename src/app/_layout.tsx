@@ -41,6 +41,7 @@ function RootNavigator() {
         }}
       >
         <Stack.Screen name="setup" />
+        <Stack.Screen name="tutor-onboarding" />
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(app)" />
       </Stack>

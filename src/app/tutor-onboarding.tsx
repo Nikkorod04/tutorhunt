@@ -1,7 +1,8 @@
-import { router } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import React, { useState } from 'react';
 import { Image, View } from 'react-native';
 
+import { AppLoading } from '@/components/AppLoading';
 import { Avatar, Button, Card, Screen, Text } from '@/components/ui';
 import { APP_NAME } from '@/constants/branding';
 import { ILLUSTRATIONS } from '@/constants/illustrations';
@@ -17,9 +18,15 @@ import { useTheme } from '@/theme';
 
 export default function TutorOnboardingScreen() {
   const theme = useTheme();
+  const status = useAuthStore((state) => state.status);
   const signedInUser = getFirebaseAuth().currentUser;
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  if (status === 'loading') return <AppLoading />;
+  if (status !== 'needsProfile') {
+    return <Redirect href={status === 'signedIn' ? '/' : '/login'} />;
+  }
 
   async function handleContinue() {
     if (busy) return;
