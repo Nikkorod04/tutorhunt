@@ -181,7 +181,10 @@ export function Button({
           justifyContent: 'center',
         }}
       >
-        <View style={[styles.row, { gap: sizeSpec.gap, opacity: loading ? 0 : 1 }]}>
+        <View
+          collapsable={false}
+          style={[styles.row, { gap: sizeSpec.gap, opacity: loading ? 0 : 1 }]}
+        >
           {iconPosition === 'leading' ? glyph : null}
           <Text style={labelStyle} color={colors.label}>
             {label}

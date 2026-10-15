@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View } from 'react-native';
+import React, { useRef, useState } from 'react';
+import { View, type TextInput } from 'react-native';
 
 import { Button, Card, Chip, DateField, SectionHeader, Text, TextField } from '@/components/ui';
 import type { RecurringSeries, Student, TopicCategory } from '@/types';
@@ -39,6 +39,10 @@ export function RecurringSeriesForm({ students, initial = null, submitLabel, bus
   const [skipDate, setSkipDate] = useState<Date | null>(null);
   const [skipDates, setSkipDates] = useState<Date[]>(initial?.skipDates ?? []);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const startTimeRef = useRef<TextInput>(null);
+  const endTimeRef = useRef<TextInput>(null);
+  const subjectRef = useRef<TextInput>(null);
+  const rateRef = useRef<TextInput>(null);
 
   React.useEffect(() => {
     if (initial || endDate) return;
@@ -85,27 +89,27 @@ export function RecurringSeriesForm({ students, initial = null, submitLabel, bus
         <View style={{ gap: theme.space[16] }}>
           <View style={{ gap: theme.space[8] }}><Text token="caption" color={theme.colors.textSecondary}>Student</Text><View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.space[8] }}>{students.map((student) => <Chip key={student.id} label={student.nickname} selected={studentId === student.id} onPress={() => { setStudentId(student.id); clearError('studentId'); }} />)}</View>{errors.studentId ? <Text token="caption" color={theme.colors.danger}>{errors.studentId}</Text> : null}</View>
           <View style={{ gap: theme.space[8] }}><Text token="caption" color={theme.colors.textSecondary}>Repeats on</Text><View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.space[8] }}>{WEEKDAYS.map((label, index) => <Chip key={label} label={label} selected={weekdays.includes(index)} onPress={() => { setWeekdays((current) => current.includes(index) ? current.filter((day) => day !== index) : [...current, index].sort()); clearError('weekdays'); }} />)}</View>{errors.weekdays ? <Text token="caption" color={theme.colors.danger}>{errors.weekdays}</Text> : null}</View>
-          <DateField label="First session" value={startDate} onChange={(value) => { setStartDate(value); clearError('startDate'); clearError('endDate'); }} error={errors.startDate} />
-          <DateField label="Last session" value={endDate} onChange={(value) => { setEndDate(value); clearError('endDate'); }} error={errors.endDate} />
-          <TextField label="Start time" value={startTime} onChangeText={(value) => { setStartTime(value); clearError('startTime'); }} placeholder="4:00 PM" error={errors.startTime} />
-          <TextField label="End time" value={endTime} onChangeText={(value) => { setEndTime(value); clearError('endTime'); }} placeholder="5:00 PM" error={errors.endTime} />
+          <DateField label="First session" value={startDate} onChange={(value) => { setStartDate(value); clearError('startDate'); clearError('endDate'); }} error={errors.startDate} pickerOnly />
+          <DateField label="Last session" value={endDate} onChange={(value) => { setEndDate(value); clearError('endDate'); }} error={errors.endDate} pickerOnly />
+          <TextField label="Start time" value={startTime} onChangeText={(value) => { setStartTime(value); clearError('startTime'); }} placeholder="4:00 PM" error={errors.startTime} inputRef={startTimeRef} returnKeyType="next" onSubmitEditing={() => endTimeRef.current?.focus()} />
+          <TextField label="End time" value={endTime} onChangeText={(value) => { setEndTime(value); clearError('endTime'); }} placeholder="5:00 PM" error={errors.endTime} inputRef={endTimeRef} returnKeyType="next" onSubmitEditing={() => subjectRef.current?.focus()} />
           <Text token="caption" color={theme.colors.textMuted}>Up to 100 sessions or 6 months, whichever comes first.</Text>
         </View>
       </Card>
       <Card variant="raised">
         <SectionHeader title="Lesson and fee" />
         <View style={{ gap: theme.space[16] }}>
-          <TextField label="Subject" value={subject} onChangeText={(value) => { setSubject(value); clearError('subject'); }} placeholder="Mathematics" error={errors.subject} />
+          <TextField label="Subject" value={subject} onChangeText={(value) => { setSubject(value); clearError('subject'); }} placeholder="Mathematics" error={errors.subject} inputRef={subjectRef} returnKeyType="next" onSubmitEditing={() => rateRef.current?.focus()} />
           <View style={{ gap: theme.space[8] }}><Text token="caption" color={theme.colors.textSecondary}>Topic category</Text><View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.space[8] }}>{TOPICS.map((topic) => <Chip key={topic.value} label={topic.label} selected={topicCategory === topic.value} onPress={() => setTopicCategory(topic.value)} />)}</View></View>
           <View style={{ flexDirection: 'row', gap: theme.space[8] }}><Chip label="Per hour" selected={rateType === 'hourly'} onPress={() => setRateType('hourly')} /><Chip label="Per session" selected={rateType === 'per_session'} onPress={() => setRateType('per_session')} /></View>
-          <TextField label={rateType === 'hourly' ? 'Rate per hour' : 'Rate per session'} value={rate} onChangeText={(value) => { setRate(value); clearError('rate'); }} placeholder="350" keyboardType="decimal-pad" error={errors.rate} />
+          <TextField label={rateType === 'hourly' ? 'Rate per hour' : 'Rate per session'} value={rate} onChangeText={(value) => { setRate(value); clearError('rate'); }} placeholder="350" keyboardType="decimal-pad" error={errors.rate} inputRef={rateRef} returnKeyType="done" />
         </View>
       </Card>
       <Card variant="raised">
         <SectionHeader title="Skip dates" />
         <View style={{ gap: theme.space[12] }}>
           <Text token="caption" color={theme.colors.textMuted}>Leave out holidays or days when a session will not happen.</Text>
-          <DateField label="Holiday date" value={skipDate} onChange={setSkipDate} />
+          <DateField label="Holiday date" value={skipDate} onChange={setSkipDate} pickerOnly />
           <Button label="Add skip date" variant="secondary" size="sm" onPress={addSkipDate} />
           {skipDates.map((date) => <Chip key={date.getTime()} label={formatDisplayDate(date)} variant="removable" onRemove={() => setSkipDates((current) => current.filter((item) => item.getTime() !== date.getTime()))} />)}
         </View>

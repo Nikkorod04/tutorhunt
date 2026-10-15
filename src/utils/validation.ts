@@ -8,7 +8,7 @@
  * Screens render the messages; they never re-implement the rules.
  */
 
-import type { ExpenseCategory, PaymentMethod, RateType } from '@/types';
+import type { ExpenseCategory, PaymentMethod, RateType, StudentGender } from '@/types';
 
 export interface ValidationIssue {
   /** Matches the form field key so a screen can attach the message. */
@@ -84,6 +84,7 @@ export function parseClockTime(raw: string): { hours: number; minutes: number } 
 
 export interface StudentFormValues {
   nickname: string;
+  gender: StudentGender | null;
   birthday: Date | null;
   school: string;
   gradeLevel: string;
@@ -219,6 +220,10 @@ export function validateStudent(
   now: Date = new Date(),
 ): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
+
+  if (!values.gender) {
+    issues.push({ field: 'gender', message: 'Choose Male or Female.' });
+  }
 
   if (isBlank(values.nickname)) {
     issues.push({ field: 'nickname', message: 'A nickname is required.' });

@@ -99,7 +99,7 @@ test('rules: role cannot be changed by the client', { skip }, async () => {
   await setup();
   await seedUser('alice');
 
-  await assertFails(updateDoc(doc(asUser('alice'), 'users', 'alice'), { role: 'parent' }));
+  await assertFails(updateDoc(doc(asUser('alice'), 'users', 'alice'), { role: 'admin' }));
 });
 
 test('rules: accountStatus cannot be changed by the client', { skip }, async () => {
@@ -120,6 +120,36 @@ test('rules: private subcollections are owner-only', { skip }, async () => {
     setDoc(doc(asUser('alice'), 'users', 'alice', 'students', 's1'), { nickname: 'Ana' }),
   );
   await assertFails(getDoc(doc(asUser('bob'), 'users', 'alice', 'students', 's1')));
+});
+
+test('rules: announcements are admin-created and user read state is private', { skip }, async () => {
+  await setup();
+  await seedUser('alice');
+  await seedUser('bob');
+
+  const announcementId = `announcement-${Date.now()}`;
+  const announcement = doc(asAdmin('admin'), 'announcements', announcementId);
+  const payload = {
+    title: 'Tutor Buddy update',
+    message: 'A new update is available.',
+    createdByUid: 'admin',
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  await assertSucceeds(setDoc(announcement, payload));
+  await assertSucceeds(getDoc(doc(asUser('alice'), 'announcements', announcementId)));
+  await assertFails(setDoc(doc(asUser('alice'), 'announcements', `not-admin-${Date.now()}`), payload));
+
+  const aliceRead = doc(asUser('alice'), 'announcementReads', 'alice', 'items', announcementId);
+  await assertSucceeds(setDoc(aliceRead, {
+    uid: 'alice',
+    announcementId,
+    readAt: new Date(),
+  }));
+  await assertFails(getDoc(doc(asUser('bob'), 'announcementReads', 'alice', 'items', announcementId)));
+  await assertFails(deleteDoc(doc(asUser('alice'), 'announcements', announcementId)));
+  await assertSucceeds(deleteDoc(doc(asAdmin('admin'), 'announcements', announcementId)));
 });
 
 test('rules: a suspended account cannot write but can still read', { skip }, async () => {
@@ -233,55 +263,6 @@ test('rules: usageMonth may not move backwards', { skip }, async () => {
   );
 });
 
-test('rules: a tutor cannot award itself verification or a rating', { skip }, async () => {
-  await setup();
-  await seedUser('alice');
-  const e = await setup();
-  await e.withSecurityRulesDisabled(async (ctx) => {
-    await setDoc(doc(ctx.firestore(), 'tutorProfiles', 'alice'), {
-      uid: 'alice',
-      displayName: 'Alice',
-      rating: 0,
-      reviewCount: 0,
-      identityVerified: false,
-      credentialsVerified: false,
-    });
-  });
-
-  const db = asUser('alice');
-
-  await assertFails(
-    updateDoc(doc(db, 'tutorProfiles', 'alice'), { credentialsVerified: true }),
-  );
-  await assertFails(updateDoc(doc(db, 'tutorProfiles', 'alice'), { rating: 5 }));
-
-  // Ordinary profile edits still work.
-  await assertSucceeds(updateDoc(doc(db, 'tutorProfiles', 'alice'), { displayName: 'Alice T.' }));
-});
-
-test('rules: a parent profile is readable only when contactVisible', { skip }, async () => {
-  await setup();
-  await seedUser('alice', { role: 'parent' });
-  await seedUser('bob');
-  const e = await setup();
-  await e.withSecurityRulesDisabled(async (ctx) => {
-    await setDoc(doc(ctx.firestore(), 'parentProfiles', 'alice'), {
-      uid: 'alice',
-      displayName: 'Alice',
-      city: 'Tacloban City',
-      contactVisible: false,
-    });
-  });
-
-  await assertFails(getDoc(doc(asUser('bob'), 'parentProfiles', 'alice')));
-
-  await e.withSecurityRulesDisabled(async (ctx) => {
-    await updateDoc(doc(ctx.firestore(), 'parentProfiles', 'alice'), { contactVisible: true });
-  });
-
-  await assertSucceeds(getDoc(doc(asUser('bob'), 'parentProfiles', 'alice')));
-});
-
 test('rules: reports are writable by any signed-in user but readable only by admin', { skip }, async () => {
   await setup();
   await seedUser('alice');
@@ -289,7 +270,7 @@ test('rules: reports are writable by any signed-in user but readable only by adm
   await assertSucceeds(
     setDoc(doc(asUser('alice'), 'reports', 'r1'), {
       reporterUid: 'alice',
-      targetType: 'tutor_profile',
+      targetType: 'account',
       targetId: 'someone',
       reason: 'spam',
       description: '',
@@ -302,7 +283,51 @@ test('rules: reports are writable by any signed-in user but readable only by adm
   await assertSucceeds(getDoc(doc(asAdmin('root'), 'reports', 'r1')));
 });
 
-test('rules: an anonymous client cannot read the marketplace', { skip }, async () => {
+test('rules: verification requests are private until reviewed by admin', { skip }, async () => {
+  await setup();
+  await seedUser('alice');
+  await seedUser('bob');
+
+  await assertSucceeds(
+    setDoc(doc(asUser('alice'), 'verificationRequests', 'v1'), {
+      uid: 'alice',
+      requestType: 'credentials',
+      status: 'pending',
+    }),
+  );
+  await assertSucceeds(getDoc(doc(asUser('alice'), 'verificationRequests', 'v1')));
+  await assertFails(getDoc(doc(asUser('bob'), 'verificationRequests', 'v1')));
+  await assertFails(
+    setDoc(doc(asUser('alice'), 'verificationRequests', 'v2'), {
+      uid: 'alice',
+      requestType: 'credentials',
+      status: 'approved',
+    }),
+  );
+});
+
+test('rules: retired marketplace collections are inaccessible', { skip }, async () => {
+  await setup();
+  await seedUser('alice');
+
+  const e = await setup();
+  await e.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'tutorProfiles', 'alice'), { uid: 'alice' });
+    await setDoc(doc(ctx.firestore(), 'parentProfiles', 'alice'), { uid: 'alice' });
+    await setDoc(doc(ctx.firestore(), 'parentPosts', 'post-1'), { parentUid: 'alice' });
+    await setDoc(doc(ctx.firestore(), 'users', 'alice', 'favorites', 'tutor-1'), {
+      tutorUid: 'tutor-1',
+    });
+  });
+
+  const db = asUser('alice');
+  await assertFails(getDoc(doc(db, 'tutorProfiles', 'alice')));
+  await assertFails(getDoc(doc(db, 'parentProfiles', 'alice')));
+  await assertFails(getDoc(doc(db, 'parentPosts', 'post-1')));
+  await assertFails(getDoc(doc(db, 'users', 'alice', 'favorites', 'tutor-1')));
+});
+
+test('rules: an anonymous client cannot read a user account', { skip }, async () => {
   await setup();
   await seedUser('alice');
 

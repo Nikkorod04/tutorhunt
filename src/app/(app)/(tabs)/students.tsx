@@ -9,7 +9,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, RefreshControl, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 
 import {
   Avatar,
@@ -19,9 +19,11 @@ import {
   EmptyState,
   Screen,
   Text,
+  TextField,
+  TopAppBar,
 } from '@/components/ui';
-import { RecordListCard, RecordListSummary } from '@/components/RecordList';
 import { activePlanFor, limitsFor } from '@/constants/plans';
+import { NotificationBell } from '@/components/NotificationBell';
 import {
   countActiveStudents,
   listStudents,
@@ -84,6 +86,7 @@ export default function StudentsScreen() {
   } = useStudentStore();
 
   const [activeCount, setActiveCount] = useState<number | null>(null);
+  const [search, setSearch] = useState('');
 
   const loadFirstPage = useCallback(async () => {
     if (!profile) return;
@@ -129,87 +132,69 @@ export default function StudentsScreen() {
     activeCount !== null &&
     activeCount >= limits.maxActiveStudents;
 
+  const visibleItems = search.trim()
+    ? items.filter((item) => `${item.nickname} ${item.school} ${item.gradeLevel}`.toLowerCase().includes(search.trim().toLowerCase()))
+    : items;
+
   const header = (
-    <View style={{ paddingHorizontal: theme.layout.screenPadding, paddingTop: theme.space[8] }}>
-      <View style={{ gap: theme.space[4] }}>
-        <Text token="h1">Students</Text>
-        <Text token="caption" color={theme.colors.textMuted}>Manage your tutees, rates and tutoring activity.</Text>
-      </View>
-    </View>
+    <TopAppBar title="Students" action={<NotificationBell />} />
   );
 
   return (
-    <Screen header={header} padded={false}>
-      <View style={{ flex: 1 }}>
-        {activeCount !== null ? (
-          <View style={{ paddingHorizontal: theme.layout.screenPadding, paddingTop: theme.space[12] }}>
-            <RecordListSummary
-              icon="people-outline"
-              label="ACTIVE STUDENTS"
-              value={Number.isFinite(limits.maxActiveStudents) ? `${activeCount} of ${limits.maxActiveStudents}` : String(activeCount)}
-              description={Number.isFinite(limits.maxActiveStudents) ? 'Students currently using your plan allowance.' : 'Students currently active in your tutoring list.'}
-            />
-          </View>
-        ) : null}
-
-        <View
-          style={{
-            flexDirection: 'row',
-            gap: theme.space[8],
-            paddingHorizontal: theme.layout.screenPadding,
-            paddingVertical: theme.space[12],
-          }}
-        >
-          {FILTERS.map((option) => (
-            <Chip
-              key={option.label}
-              variant="filter"
-              label={option.label}
-              selected={filter === option.value}
-              onPress={() => setFilter(option.value)}
-            />
-          ))}
-        </View>
-
-        {atCap ? (
-          <View style={{ paddingHorizontal: theme.layout.screenPadding, paddingBottom: theme.space[12] }}>
-            <Card variant="premium">
-              <View style={{ flexDirection: 'row', gap: theme.space[12] }}>
-                <Ionicons name="star" size={20} color={theme.colors.premium} />
-                <View style={{ flex: 1, gap: theme.space[4] }}>
-                  <Text token="caption" color={theme.colors.premiumText}>
-                    You have reached the free plan limit
-                  </Text>
-                  <Text token="caption" color={theme.colors.textMuted}>
-                    Existing students are never deleted. Archive one, or upgrade for unlimited
-                    students.
-                  </Text>
-                  <Button label="View Pro plans" size="sm" variant="accent" onPress={() => router.push('/upgrade' as never)} />
-                </View>
-              </View>
-            </Card>
-          </View>
-        ) : null}
-
-        {error ? (
-          <View style={{ paddingHorizontal: theme.layout.screenPadding, paddingBottom: theme.space[12] }}>
-            <Card variant="flat">
-              <Text token="caption" color={theme.colors.dangerText}>
-                {error}
-              </Text>
-            </Card>
-          </View>
-        ) : null}
-
+    <Screen
+      header={header}
+      padded={false}
+    >
+      <View style={{ flex: 1, position: 'relative' }}>
         <FlatList
-          data={items}
+          style={{ flex: 1 }}
+          data={visibleItems}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{
             paddingHorizontal: theme.layout.screenPadding,
-            // Clears the floating action button: 64 for the button, 16 of margin.
-            paddingBottom: theme.space[64] + theme.space[16],
+            paddingBottom: theme.space[64] + theme.space[24],
             gap: theme.space[8],
           }}
+          ListHeaderComponent={
+            <View style={{ gap: theme.space[12], paddingTop: theme.space[12], paddingBottom: theme.space[4] }}>
+              <TextField
+                value={search}
+                onChangeText={setSearch}
+                placeholder="Search students"
+                icon="search-outline"
+                compact
+              />
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: theme.space[8] }}>
+                {FILTERS.map((option) => (
+                  <Chip
+                    key={option.label}
+                    variant="filter"
+                    label={option.label}
+                    selected={filter === option.value}
+                    onPress={() => setFilter(option.value)}
+                  />
+                ))}
+              </ScrollView>
+              {atCap ? (
+                <Card variant="premium">
+                  <View style={{ flexDirection: 'row', gap: theme.space[12] }}>
+                    <Ionicons name="star" size={20} color={theme.colors.premium} />
+                    <View style={{ flex: 1, gap: theme.space[4] }}>
+                      <Chip label="Upgrade to Pro" variant="status" tone="premium" icon="star-outline" />
+                      <Text token="caption" color={theme.colors.premiumText}>You have reached the free plan limit.</Text>
+                      <Text token="caption" color={theme.colors.textMuted}>Archive one student, or upgrade for unlimited students.</Text>
+                      <Button label="View Pro plans" size="sm" variant="accent" onPress={() => router.push('/upgrade' as never)} />
+                    </View>
+                  </View>
+                </Card>
+              ) : null}
+              {error ? (
+                <Card variant="flat">
+                  <Text token="caption" color={theme.colors.dangerText}>{error}</Text>
+                </Card>
+              ) : null}
+            </View>
+          }
           refreshControl={
             <RefreshControl
               refreshing={loading && items.length > 0}
@@ -220,28 +205,32 @@ export default function StudentsScreen() {
           onEndReachedThreshold={0.4}
           onEndReached={() => void loadMore()}
           renderItem={({ item }) => (
-            <RecordListCard
-              icon="person-outline"
-              title={item.nickname}
-              subtitle={subtitleFor(item)}
-              leading={
-                <Avatar
-                  builtin={item.avatarType === 'custom' ? undefined : item.avatarType}
-                  imageUrl={item.avatarType === 'custom' ? item.customAvatarUrl : null}
-                  name={item.nickname}
-                  size="md"
-                />
-              }
-              status={<Chip variant="status" tone={STATUS_TONE[item.status]} label={STATUS_LABEL[item.status]} />}
-              tags={
-                <>
+            <Card
+              variant="interactive"
+              onPress={() => router.push(`/student-detail?id=${item.id}` as never)}
+              accessibilityLabel={`View student ${item.nickname}`}
+            >
+              <View style={{ gap: theme.space[12] }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.space[12] }}>
+                  <Avatar
+                    builtin={item.avatarType === 'custom' ? undefined : item.avatarType}
+                    imageUrl={item.avatarType === 'custom' ? item.customAvatarUrl : null}
+                    name={item.nickname}
+                    size="md"
+                  />
+                  <View style={{ flex: 1, gap: theme.space[4] }}>
+                    <Text token="h3" numberOfLines={1}>{item.nickname}</Text>
+                    <Text token="caption" color={theme.colors.textMuted} numberOfLines={1}>{subtitleFor(item)}</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={theme.colors.textHint} />
+                </View>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.space[8] }}>
+                  <Chip variant="status" tone={STATUS_TONE[item.status]} label={STATUS_LABEL[item.status]} />
                   {item.gradeLevel ? <Chip variant="status" tone="info" label={item.gradeLevel} icon="school-outline" /> : null}
                   <Chip variant="status" tone="neutral" label={item.rateType === 'hourly' ? 'Hourly rate' : 'Per session'} icon="cash-outline" />
-                </>
-              }
-              actionLabel="View student"
-              onPress={() => router.push(`/student-detail?id=${item.id}` as never)}
-            />
+                </View>
+              </View>
+            </Card>
           )}
           ListEmptyComponent={
             loading ? (
@@ -252,11 +241,12 @@ export default function StudentsScreen() {
               <Card variant="flat">
                 <EmptyState
                   icon="people-outline"
-                  title="No students yet"
-                  description="Add your first tutee to begin tracking sessions."
+                  title={search ? 'No matching students' : 'No students yet'}
+                  description={search ? 'Try a different name, school or grade.' : 'Add your first tutee to begin tracking sessions.'}
                   action={
                     <Button
                       label="Add student"
+                      disabled={atCap}
                       onPress={() => router.push('/student-new' as never)}
                     />
                   }
@@ -275,19 +265,39 @@ export default function StudentsScreen() {
 
         {items.length > 0 ? (
           <View
+            pointerEvents="box-none"
             style={{
               position: 'absolute',
-              left: theme.layout.screenPadding,
-              right: theme.layout.screenPadding,
+              left: 0,
+              right: 0,
               bottom: theme.space[16],
+              paddingHorizontal: theme.layout.screenPadding,
+              alignItems: 'flex-end',
             }}
           >
-            <Button
-              label="Add student"
-              icon="add"
+            <Pressable
               onPress={() => router.push('/student-new' as never)}
-              fullWidth
-            />
+              disabled={atCap}
+              accessibilityRole="button"
+              accessibilityLabel="Add student"
+              accessibilityState={{ disabled: atCap }}
+              style={({ pressed }) => ({
+                width: 56,
+                height: 56,
+                borderRadius: 28,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: atCap ? theme.colors.surfaceSunken : theme.colors.primary,
+                opacity: pressed ? 0.82 : atCap ? 0.55 : 1,
+                elevation: 4,
+                shadowColor: theme.colors.textPrimary,
+                shadowOpacity: 0.18,
+                shadowRadius: 8,
+                shadowOffset: { width: 0, height: 3 },
+              })}
+            >
+              <Ionicons name="add" size={28} color={atCap ? theme.colors.textMuted : theme.colors.textOnPrimary} />
+            </Pressable>
           </View>
         ) : null}
       </View>

@@ -1,13 +1,15 @@
-# Tutor Hunt
+# Tutor Buddy
 
-A mobile app for tutors and parents in Tacloban City, Philippines.
+A mobile app for tutors across the Philippines to manage students, sessions,
+expenses, payments, and professional statements.
 
-Tutors manage students, sessions, expenses, payments and parent statements.
-Parents find tutors and post tutoring requests.
+Tutor Buddy is tutor-only. Parent marketplace features and routes have been
+removed from the app; student guardian details remain available for tutors to
+manage their records.
 
 ## License
 
-The original Tutor Hunt source code and assets are proprietary to Nicanor
+The original Tutor Buddy source code and assets are proprietary to Nicanor
 Nikko Villas. See `LICENSE`. Third-party dependencies remain under their
 respective licenses.
 
@@ -58,7 +60,7 @@ here, do it — that reconciles the tree and the lockfile.
 ### Firebase
 
 1. Create a project at console.firebase.google.com
-2. Enable **Email/Password** under Authentication
+2. Enable **Google** under Authentication → Sign-in method
 3. Create a **Cloud Firestore** database
 4. Copy the web app config into `.env`
 5. Deploy the rules and indexes:
@@ -92,8 +94,8 @@ RULES_TEST=1 npm run test:rules
 ```
 src/
   app/                 Expo Router routes (files here are screens)
-    (auth)/            login, register, forgot-password, role-selection
-    (app)/             authenticated area, role-aware tabs
+    (auth)/            Google login and tutor onboarding
+    (app)/             authenticated tutor area and tabs
   components/
     ui/                the design-system primitives
   constants/plans.ts   the single PLAN_LIMITS definition
@@ -163,18 +165,40 @@ builder, selectable billable sessions, selectable reimbursable expenses, local
 PDF generation, preview and sharing, sequential statement metadata, atomic
 expense inclusion/quota updates, statement history, and free-plan quota UI.
 
-**Phase 8 complete** — tutor public profiles: compact `tutorProfiles/{uid}`
-documents, editable subjects, grade levels, rates, tutoring modes, areas,
-education and experience details, contact preference, visibility controls, and
-a design-system public profile preview.
+**Tutor-only migration complete** — public tutor profiles, parent profiles,
+marketplace browsing, favorites, parent postings, and tutor-interest
+notifications were removed from the product. Existing Firestore documents are
+left untouched for safe archival or future migration.
 
-**Phase 9 complete** — parent profiles, role-aware marketplace navigation,
-Firestore-indexed tutor browsing with city and one advanced filter at a time,
-cursor pagination, tutor detail views, and denormalized favorites with an
-unavailable-tutor state. The marketplace service area is limited to ten
-canonical locations across Leyte and Samar, with dependent barangay selectors
-for parents and tutors and an optional barangay marketplace filter.
+**Phase 7 complete** — recurring sessions with weekday/date-range generation,
+series management, holiday skips, caps, and Pro gating.
 
-Phase 7 and Phases 10 to 12 remain in section 47 of the blueprint. Screens that
-belong to a later phase render a placeholder built with the real design system,
-so the navigation and visual language can be reviewed before the feature exists.
+**Phase 4 of the tutor-only migration complete** — the app no longer exposes or
+writes marketplace collections, public tutor profiles, parent accounts,
+favorites, parent postings, or tutor-interest notifications. Firestore,
+Storage, indexes, and Cloud Functions are aligned with the tutor-only model.
+Legacy documents remain untouched for safe archival; deploy the prepared rules,
+indexes, Storage rules, and Functions when you are ready to apply the backend
+cutover.
+
+The product-hardening status is now:
+
+- **Phase 11 complete** — Free/Pro limits are centralized and enforced in the
+  UI and services, Pro expiry is handled, reimbursable expense tracking is
+  included in the Free plan,
+  pricing is locked to ₱29 / 30 days, ₱149 / 6 months, and ₱249 / 1 year, and
+  renewals extend active access correctly. Backend deployment and live-account
+  QA remain operational follow-up steps.
+
+**Phase 12 implementation complete** — account deletion is handled by the
+trusted `deleteMyAccount` Cloud Function, suspension is enforced by Rules,
+verification requests have a private schema, and web App Check can be enabled
+with `EXPO_PUBLIC_FIREBASE_APPCHECK_SITE_KEY`. Deploy the backend before
+testing account deletion:
+
+```powershell
+npx firebase-tools deploy --only functions,firestore,storage --project tutorhunt-ded38
+```
+
+Native Android/iOS App Check still requires a native provider in an EAS build;
+it is intentionally not enabled in Expo Go.

@@ -8,6 +8,7 @@ import {
 } from 'firebase/firestore';
 
 import type { Entitlement, UserProfile } from '@/types';
+import { isTutorAvatarId } from '@/constants/avatars';
 import { getDb, getFirebaseAuth } from './firebase';
 import { fetchEntitlement, fetchUserProfile } from './auth.service';
 
@@ -27,6 +28,9 @@ function mapProfile(uid: string, data: Record<string, unknown>): UserProfile {
     uid,
     email: typeof data.email === 'string' ? data.email : '',
     displayName: typeof data.displayName === 'string' ? data.displayName : '',
+    photoUrl: typeof data.photoUrl === 'string' ? data.photoUrl : null,
+    avatarId: isTutorAvatarId(data.avatarId) ? data.avatarId : 'default',
+    customAvatarUrl: typeof data.customAvatarUrl === 'string' ? data.customAvatarUrl : null,
     role: (data.role ?? 'tutor') as UserProfile['role'],
     accountStatus: (data.accountStatus ?? 'active') as UserProfile['accountStatus'],
     createdAt: toDate(data.createdAt),
@@ -54,6 +58,9 @@ export async function listAdminUsers(): Promise<AdminUserRecord[]> {
 }
 
 export async function activateProForUser(uid: string, proUntil: Date): Promise<void> {
+  if (!uid || !Number.isFinite(proUntil.getTime()) || proUntil.getTime() <= Date.now()) {
+    throw new Error('Choose a valid future Pro expiry date.');
+  }
   await updateDoc(doc(getDb(), 'entitlements', uid), {
     plan: 'pro',
     proUntil,

@@ -184,6 +184,19 @@ export async function updateSession(
   });
 }
 
+/** Updates only the lifecycle state for quick actions such as completing a past session. */
+export async function updateSessionStatus(
+  tutorUid: string,
+  sessionId: string,
+  status: EditableSessionStatus,
+): Promise<void> {
+  await updateDoc(doc(getDb(), 'users', tutorUid, 'sessions', sessionId), {
+    status,
+    billable: status === 'completed',
+    updatedAt: serverTimestamp(),
+  });
+}
+
 export async function markSessionRescheduled(
   tutorUid: string,
   originalId: string,

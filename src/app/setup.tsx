@@ -6,12 +6,12 @@
  * deliberately runnable before a Firebase project exists.
  */
 
-import { Ionicons } from '@expo/vector-icons';
 import { Redirect } from 'expo-router';
 import React from 'react';
-import { View } from 'react-native';
+import { Image, View } from 'react-native';
 
 import { Card, Screen, Text } from '@/components/ui';
+import { APP_ICON, APP_NAME } from '@/constants/branding';
 import { isFirebaseConfigured } from '@/services/firebase';
 import { useTheme } from '@/theme';
 
@@ -43,16 +43,23 @@ export default function SetupScreen() {
               backgroundColor: theme.colors.accentSubtle,
               alignItems: 'center',
               justifyContent: 'center',
+              overflow: 'hidden',
             }}
           >
-            <Ionicons name="flame-outline" size={32} color={theme.colors.accent} />
+            <Image
+              source={APP_ICON}
+              style={{ width: 72, height: 72 }}
+              resizeMode="contain"
+              accessibilityLabel={`${APP_NAME} logo`}
+              accessibilityIgnoresInvertColors
+            />
           </View>
 
           <Text token="h1" align="center">
             Connect Firebase
           </Text>
           <Text token="body" color={theme.colors.textMuted} align="center">
-            Tutor Hunt needs a Firebase project before it can sign anyone in.
+            {APP_NAME} needs a Firebase project before it can sign anyone in.
           </Text>
         </View>
 

@@ -33,6 +33,8 @@ interface StudentState {
   appendPage: (page: StudentPage) => void;
   /** Inserts or replaces one student, keeping the list in nickname order. */
   upsert: (student: Student) => void;
+  /** Removes a permanently deleted student from the visible list. */
+  remove: (studentId: string) => void;
   setSelected: (student: Student | null) => void;
   reset: () => void;
 }
@@ -82,6 +84,12 @@ export const useStudentStore = create<StudentState>((set) => ({
           );
       return { items };
     }),
+
+  remove: (studentId) =>
+    set((state) => ({
+      items: state.items.filter((student) => student.id !== studentId),
+      selected: state.selected?.id === studentId ? null : state.selected,
+    })),
 
   setSelected: (selected) => set({ selected }),
 

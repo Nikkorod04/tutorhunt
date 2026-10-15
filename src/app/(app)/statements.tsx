@@ -1,10 +1,11 @@
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, RefreshControl, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Badge, Button, Card, Chip, EmptyState, Screen, Text } from '@/components/ui';
-import { RecordListCard, RecordListSummary } from '@/components/RecordList';
+import { Badge, Card, Chip, EmptyState, Screen, Text, TopAppBar } from '@/components/ui';
+import { RecordListCard } from '@/components/RecordList';
 import {
   listStatements,
   statementErrorMessage,
@@ -29,8 +30,6 @@ export default function StatementsScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [studentNames, setStudentNames] = useState<Record<string, string>>({});
-  const loadedTotal = items.reduce((sum, item) => sum + item.totalDue, 0);
-
   const loadFirst = useCallback(async () => {
     if (!profile) return;
     setLoading(true);
@@ -68,27 +67,9 @@ export default function StatementsScreen() {
     }
   }
 
-  const header = (
-    <View style={{ paddingHorizontal: theme.layout.screenPadding, paddingTop: theme.space[8], gap: theme.space[8] }}>
-      <Text token="h1">Statements</Text>
-      <Text token="caption" color={theme.colors.textMuted}>Your generated statement records. PDFs stay on your device.</Text>
-    </View>
-  );
-
   return (
-    <Screen header={header} padded={false}>
+    <Screen header={<TopAppBar title="Statements" />} padded={false}>
       <View style={{ flex: 1 }}>
-        {items.length > 0 ? (
-          <View style={{ paddingHorizontal: theme.layout.screenPadding, paddingTop: theme.space[12], paddingBottom: theme.space[12] }}>
-            <RecordListSummary
-              icon="document-text-outline"
-              label="STATEMENTS LOADED"
-              value={formatPesoCompact(loadedTotal)}
-              description={`${items.length} generated statement${items.length === 1 ? '' : 's'} in this history.`}
-            />
-          </View>
-        ) : null}
-
         {error ? <View style={{ paddingHorizontal: theme.layout.screenPadding, paddingBottom: theme.space[12] }}><Card variant="flat"><Text token="caption" color={theme.colors.dangerText}>{error}</Text></Card></View> : null}
         <FlatList
           data={items}
@@ -115,11 +96,41 @@ export default function StatementsScreen() {
               onPress={() => router.push({ pathname: '/statement-detail', params: { id: item.id } } as never)}
             />
           )}
-          ListEmptyComponent={loading ? <View style={{ paddingTop: theme.space[48], alignItems: 'center' }}><ActivityIndicator color={theme.colors.primary} /></View> : <Card variant="flat"><EmptyState icon="document-text-outline" title="No statements yet" description="Generate a statement after recording billable sessions or reimbursable expenses." action={<Button label="Generate statement" onPress={() => router.push('/statement-new' as never)} />} /></Card>}
+          ListEmptyComponent={loading ? <View style={{ paddingTop: theme.space[48], alignItems: 'center' }}><ActivityIndicator color={theme.colors.primary} /></View> : <Card variant="flat"><EmptyState icon="document-text-outline" title="No statements yet" description="Generate a statement after recording billable sessions or reimbursable expenses." /></Card>}
           ListFooterComponent={loadingMore ? <View style={{ paddingVertical: theme.space[16], alignItems: 'center' }}><ActivityIndicator color={theme.colors.primary} /></View> : null}
         />
-        <View style={{ position: 'absolute', left: theme.layout.screenPadding, right: theme.layout.screenPadding, bottom: theme.space[16] + insets.bottom }}>
-          <Button label="Generate statement" icon="add" onPress={() => router.push('/statement-new' as never)} fullWidth />
+        <View
+          pointerEvents="box-none"
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            bottom: theme.space[16] + insets.bottom,
+            paddingHorizontal: theme.layout.screenPadding,
+            alignItems: 'flex-end',
+          }}
+        >
+          <Pressable
+            onPress={() => router.push('/statement-new' as never)}
+            accessibilityRole="button"
+            accessibilityLabel="Generate statement"
+            style={({ pressed }) => ({
+              width: 56,
+              height: 56,
+              borderRadius: 28,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: theme.colors.primary,
+              opacity: pressed ? 0.82 : 1,
+              elevation: 4,
+              shadowColor: theme.colors.shadowBase,
+              shadowOpacity: 0.18,
+              shadowRadius: 8,
+              shadowOffset: { width: 0, height: 3 },
+            })}
+          >
+            <Ionicons name="add" size={28} color={theme.colors.textOnPrimary} />
+          </Pressable>
         </View>
       </View>
     </Screen>

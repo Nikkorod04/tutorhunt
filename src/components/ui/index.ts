@@ -26,5 +26,6 @@ export {
 } from './StatusChip';
 export { Text, type TextProps } from './Text';
 export { TextField, type TextFieldProps } from './TextField';
+export { TopAppBar, type TopAppBarProps } from './TopAppBar';
 export { ToastProvider, useToast, type ToastTone } from './ToastProvider';
 export type { IconName } from './icon';

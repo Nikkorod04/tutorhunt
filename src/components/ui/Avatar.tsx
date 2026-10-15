@@ -9,8 +9,9 @@
 import React from 'react';
 import { Image, StyleSheet, View } from 'react-native';
 
-import { ILLUSTRATIONS } from '@/constants/illustrations';
+import { DEFAULT_AVATAR, STUDENT_AVATARS, TUTOR_AVATARS } from '@/constants/avatars';
 import { useTheme } from '@/theme';
+import type { AvatarType, StudentAvatarId, TutorAvatarId } from '@/types';
 import { Text } from './Text';
 
 export type AvatarSize = 'sm' | 'md' | 'lg';
@@ -19,11 +20,21 @@ export interface AvatarProps {
   /** Used for the initials fallback. */
   name?: string;
   imageUrl?: string | null;
-  /** Built-in student avatar illustration. */
-  builtin?: 'boy' | 'girl' | 'neutral';
+  /** Built-in student or tutor avatar. Legacy values remain renderable. */
+  builtin?: Exclude<StudentAvatarId | TutorAvatarId | AvatarType, 'custom'>;
   size?: AvatarSize;
   /** Draws a primary ring, used for a verified tutor. */
   ringed?: boolean;
+}
+
+function sourceForBuiltin(builtin?: AvatarProps['builtin']) {
+  if (!builtin || builtin === 'default' || builtin === 'neutral') return DEFAULT_AVATAR;
+  if (builtin === 'boy') return STUDENT_AVATARS.male[0].source;
+  if (builtin === 'girl') return STUDENT_AVATARS.female[0].source;
+
+  const student = Object.values(STUDENT_AVATARS).flat().find((option) => option.id === builtin);
+  if (student) return student.source;
+  return TUTOR_AVATARS.find((option) => option.id === builtin)?.source ?? DEFAULT_AVATAR;
 }
 
 const DIMENSIONS: Record<AvatarSize, number> = { sm: 32, md: 44, lg: 64 };
@@ -66,7 +77,7 @@ export function Avatar({
   if (builtin) {
     return (
       <Image
-        source={ILLUSTRATIONS[builtin]}
+        source={sourceForBuiltin(builtin)}
         style={[{ width: dimension, height: dimension, borderRadius: 999 }, ring]}
         resizeMode="contain"
         accessibilityLabel={`${builtin} student avatar`}

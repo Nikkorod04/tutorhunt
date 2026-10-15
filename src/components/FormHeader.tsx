@@ -2,19 +2,34 @@ import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { View } from 'react-native';
 
-import { Card, Text, type IconName } from '@/components/ui';
+import { Card, IconButton, Text, type IconName } from '@/components/ui';
 import { useTheme } from '@/theme';
 
 interface FormHeaderProps {
   eyebrow: string;
   title: string;
-  description: string;
+  description?: string;
   icon: IconName;
+  /** Uses a compact Android-style app bar instead of a raised intro card. */
+  compact?: boolean;
+  onBack?: () => void;
 }
 
 /** Consistent, compact introduction used by create/edit flows. */
-export function FormHeader({ eyebrow, title, description, icon }: FormHeaderProps) {
+export function FormHeader({ eyebrow, title, description, icon, compact = false, onBack }: FormHeaderProps) {
   const theme = useTheme();
+
+  if (compact && onBack) {
+    return (
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.space[8], paddingVertical: theme.space[8] }}>
+        <IconButton icon="arrow-back" variant="plain" tone="primary" accessibilityLabel="Go back" onPress={onBack} />
+        <View style={{ flex: 1, gap: theme.space[2] }}>
+          <Text token="h1">{title}</Text>
+          {description ? <Text token="caption" color={theme.colors.textMuted}>{description}</Text> : null}
+        </View>
+      </View>
+    );
+  }
 
   return (
     <Card

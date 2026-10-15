@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Tutor Hunt",
+    "name": "Tutor Buddy",
     "slug": "tutor-hunt",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -31,18 +31,34 @@
       "expo-router",
       "expo-status-bar",
       [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#EEF2FF"
+        }
+      ],
+      [
         "expo-image-picker",
         {
-          "photosPermission": "Tutor Hunt uses a photo you choose as this student's private avatar.",
+          "photosPermission": "Tutor Buddy uses a photo you choose for a student avatar.",
           "cameraPermission": false,
           "microphonePermission": false
         }
       ],
       "expo-font",
-      "expo-sharing"
+      "expo-sharing",
+      "expo-notifications"
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "188348da-d5de-4e82-b16f-c8d6622fe54e"
+      }
+    },
+    "owner": "nikkos-team"
   }
 }

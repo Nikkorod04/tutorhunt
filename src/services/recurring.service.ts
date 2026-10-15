@@ -83,7 +83,7 @@ function mapSeries(id: string, data: DocumentData): RecurringSeries {
 }
 
 function assertPro(plan: Plan | null | undefined) {
-  if (!limitsFor(plan).recurringSessions) throw new Error('Recurring sessions are available on the Pro plan.');
+  if (!limitsFor(plan).recurringSessions) throw new Error('Recurring sessions is available on the Pro plan.');
 }
 
 function validateSeries(input: RecurringSeriesInput) {

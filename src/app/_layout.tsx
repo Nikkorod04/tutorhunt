@@ -8,31 +8,43 @@
  */
 
 import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import React from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { StatusBar } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { useAuthBootstrap } from '@/hooks/useAuthBootstrap';
+import { useNotificationBootstrap } from '@/hooks/useNotificationBootstrap';
 import { ToastProvider } from '@/components/ui';
 import { ThemeProvider, useTheme } from '@/theme';
+import { useAuthStore } from '@/stores/authStore';
 
 function RootNavigator() {
   useAuthBootstrap();
+  useNotificationBootstrap();
   const theme = useTheme();
+  const status = useAuthStore((state) => state.status);
+  const isAuthenticated = status === 'signedIn';
 
   return (
-    <Stack
-      screenOptions={{
-        headerShown: false,
-        contentStyle: { backgroundColor: theme.colors.canvas },
-        animation: 'slide_from_right',
-      }}
-    >
-      <Stack.Screen name="setup" />
-      <Stack.Screen name="(auth)" />
-      <Stack.Screen name="(app)" />
-    </Stack>
+    <>
+      <StatusBar
+        barStyle={isAuthenticated ? 'light-content' : 'dark-content'}
+        backgroundColor={isAuthenticated ? theme.colors.primaryPressed : theme.colors.canvas}
+        translucent={false}
+      />
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: theme.colors.canvas },
+          animation: 'slide_from_right',
+        }}
+      >
+        <Stack.Screen name="setup" />
+        <Stack.Screen name="(auth)" />
+        <Stack.Screen name="(app)" />
+      </Stack>
+    </>
   );
 }
 
@@ -42,7 +54,6 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <ThemeProvider>
           <ToastProvider>
-            <StatusBar style="dark" />
             <RootNavigator />
           </ToastProvider>
         </ThemeProvider>

@@ -4,7 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, View } from 'react-native';
 
-import { Badge, Button, Card, EmptyState, Screen, Skeleton, Text, useToast } from '@/components/ui';
+import { Badge, Button, Card, EmptyState, Screen, Skeleton, Text, TopAppBar, useToast } from '@/components/ui';
 import { RecordDetailHeader, RecordDetailMetrics, RecordDetailRow, RecordDetailSection } from '@/components/RecordDetail';
 import { getExpense } from '@/services/expenses.service';
 import { getSession } from '@/services/sessions.service';
@@ -132,7 +132,7 @@ export default function StatementDetailScreen() {
   }
 
   return (
-    <Screen scroll>
+    <Screen scroll header={<TopAppBar title="Statement info" onBack={() => router.back()} />}>
       <View style={{ paddingTop: theme.space[8], gap: theme.space[20] }}>
         <RecordDetailHeader
           eyebrow="STATEMENT RECORD"
@@ -141,6 +141,7 @@ export default function StatementDetailScreen() {
           icon="document-text-outline"
           status={<Badge label={statement.status === 'active' ? 'Active' : 'Voided'} tone={statement.status === 'active' ? 'success' : 'neutral'} />}
           onBack={() => router.back()}
+          showToolbar={false}
         />
 
         {error ? <Card variant="accent"><Text token="caption" color={theme.colors.warningText}>{error}</Text></Card> : null}
@@ -192,7 +193,7 @@ export default function StatementDetailScreen() {
               <View style={{ gap: theme.space[12] }}>
                 <View style={{ gap: theme.space[4] }}>
                   <Text token="h3">Your PDF is ready</Text>
-                  <Text token="caption" color={theme.colors.textMuted}>Preview it or share it with the parent from this device.</Text>
+                  <Text token="caption" color={theme.colors.textMuted}>Preview it or share it with your client from this device.</Text>
                 </View>
                 <Button label="Preview PDF" icon="eye-outline" variant="secondary" onPress={() => void previewPdf()} loading={busy} fullWidth />
                 <Button label="Share PDF" icon="share-outline" onPress={() => void sharePdf()} loading={busy} fullWidth />

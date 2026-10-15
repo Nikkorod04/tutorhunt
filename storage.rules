@@ -15,6 +15,14 @@ service firebase.storage {
         && request.resource.contentType.matches('image/.*');
     }
 
+    // Tutor account avatars use a separate path from student photos.
+    match /users/{uid}/profile/{fileName} {
+      allow read, delete: if isOwner(uid);
+      allow create, update: if isOwner(uid)
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

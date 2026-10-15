@@ -21,6 +21,10 @@ export interface IconButtonProps {
   size?: number;
   disabled?: boolean;
   tone?: 'default' | 'primary' | 'danger';
+  /** Optional override for controls placed on a colored surface. */
+  color?: string;
+  /** Optional pressed-state background override for controls placed on a colored surface. */
+  pressedBackgroundColor?: string;
 }
 
 export function IconButton({
@@ -31,24 +35,26 @@ export function IconButton({
   size = 20,
   disabled = false,
   tone = 'default',
+  color: colorOverride,
+  pressedBackgroundColor,
 }: IconButtonProps) {
   const theme = useTheme();
   const [pressed, setPressed] = useState(false);
 
-  const color = disabled
+  const color = colorOverride ?? (disabled
     ? theme.colors.textHint
     : tone === 'primary'
       ? theme.colors.primary
       : tone === 'danger'
         ? theme.colors.danger
-        : theme.colors.textSecondary;
+        : theme.colors.textSecondary);
 
   const background = variant === 'tonal'
     ? pressed
       ? theme.colors.borderSubtle
       : theme.colors.surfaceSunken
     : pressed
-      ? theme.colors.surfaceSunken
+      ? pressedBackgroundColor ?? theme.colors.surfaceSunken
       : 'transparent';
 
   return (

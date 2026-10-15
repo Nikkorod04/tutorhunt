@@ -52,7 +52,17 @@ export interface TextFieldProps {
   /** Shows "12/600" under the field. Requires maxLength. */
   showCounter?: boolean;
   icon?: IconName;
+  rightAction?: {
+    icon: IconName;
+    onPress: () => void;
+    accessibilityLabel: string;
+  };
   autoFocus?: boolean;
+  /** Ref exposed to forms that need to focus the next field from the keyboard. */
+  inputRef?: React.RefObject<TextInput | null>;
+  /** Makes the field display-only while still allowing a custom press action. */
+  readOnly?: boolean;
+  onPress?: () => void;
   returnKeyType?: TextInputProps['returnKeyType'];
   onSubmitEditing?: TextInputProps['onSubmitEditing'];
   testID?: string;
@@ -77,13 +87,18 @@ export function TextField({
   maxLength,
   showCounter = false,
   icon,
+  rightAction,
   autoFocus,
+  inputRef,
+  readOnly = false,
+  onPress,
   returnKeyType,
   onSubmitEditing,
   testID,
 }: TextFieldProps) {
   const theme = useTheme();
-  const inputRef = React.useRef<TextInput>(null);
+  const localInputRef = React.useRef<TextInput>(null);
+  const fieldRef = inputRef ?? localInputRef;
   const [focused, setFocused] = useState(false);
   const shake = useSharedValue(0);
 
@@ -115,7 +130,7 @@ export function TextField({
 
       <Animated.View style={shakeStyle}>
         <Pressable
-          onPress={disabled ? undefined : () => inputRef.current?.focus()}
+          onPress={disabled ? undefined : onPress ?? (readOnly ? undefined : () => fieldRef.current?.focus())}
           disabled={disabled}
           accessible={false}
           hitSlop={compact ? 6 : undefined}
@@ -149,15 +164,15 @@ export function TextField({
               />
             ) : null}
 
-              <TextInput
-                ref={inputRef}
+            <TextInput
+                ref={fieldRef}
               value={value}
               onChangeText={onChangeText}
               onFocus={() => setFocused(true)}
               onBlur={() => setFocused(false)}
               placeholder={placeholder}
               placeholderTextColor={theme.colors.textHint}
-              editable={!disabled}
+              editable={!disabled && !readOnly}
               multiline={multiline}
               keyboardType={keyboardType}
               autoCapitalize={autoCapitalize}
@@ -181,6 +196,20 @@ export function TextField({
                 },
               ]}
             />
+            {rightAction ? (
+              <Pressable
+                onPress={(event) => {
+                  event.stopPropagation();
+                  rightAction.onPress();
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={rightAction.accessibilityLabel}
+                hitSlop={8}
+                style={{ width: 32, height: 44, alignItems: 'center', justifyContent: 'center' }}
+              >
+                <Ionicons name={rightAction.icon} size={20} color={focused ? theme.colors.primary : theme.colors.textMuted} />
+              </Pressable>
+            ) : null}
           </View>
         </View>
         </Pressable>

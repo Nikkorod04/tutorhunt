@@ -1,123 +1,113 @@
-import { router } from 'expo-router';
 import React, { useState } from 'react';
-import { KeyboardAvoidingView, Platform, View } from 'react-native';
+import { View } from 'react-native';
 
-import { Button, Card, Screen, Text, TextField } from '@/components/ui';
-import { authErrorMessage, signIn } from '@/services/auth.service';
+import { AuthHeader } from '@/components/AuthHeader';
+import { Button, Card, Screen, Text } from '@/components/ui';
+import { APP_NAME } from '@/constants/branding';
+import { ILLUSTRATIONS } from '@/constants/illustrations';
+import { authErrorMessage, signInWithGoogle } from '@/services/auth.service';
+import { useAuthStore } from '@/stores/authStore';
 import { useTheme } from '@/theme';
 
 export default function LoginScreen() {
   const theme = useTheme();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const accountError = useAuthStore((state) => state.error);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-
-  const canSubmit = email.trim().length > 0 && password.length > 0 && !busy;
+  const displayedError = error ?? accountError;
 
   async function handleSubmit() {
-    if (!canSubmit) return;
+    if (busy) return;
     setBusy(true);
     setError(null);
+    let leavingScreen = false;
+
     try {
-      await signIn(email, password);
-      // The root navigator reacts to the auth store and routes on from here.
-      router.replace('/');
+      await signInWithGoogle();
+      // Auth bootstrap will replace this screen once the session is hydrated.
+      // Keep the loading subtree stable while the native stack removes it.
+      leavingScreen = true;
+      // The auth layouts route from the hydrated auth state. Waiting for the
+      // bootstrap avoids navigating before the user's profile and role load.
     } catch (caught) {
       setError(authErrorMessage(caught));
     } finally {
-      setBusy(false);
+      if (!leavingScreen) setBusy(false);
     }
   }
 
   return (
     <Screen scroll>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={{ flex: 1 }}
+      <View
+        style={{
+          width: '100%',
+          maxWidth: 520,
+          alignSelf: 'center',
+          gap: theme.space[24],
+          paddingTop: theme.space[24],
+        }}
       >
-        <View style={{ gap: theme.space[24], paddingTop: theme.space[48] }}>
-          <View style={{ gap: theme.space[4] }}>
-            <Text token="h1">Welcome back</Text>
-            <Text token="body" color={theme.colors.textMuted}>
-              Sign in to manage your students and sessions.
-            </Text>
-          </View>
+        <AuthHeader
+          title="Welcome back"
+          description="Sign in to manage your students, sessions and tutoring work."
+          illustration={ILLUSTRATIONS.tutor}
+        />
 
-          <Card variant="raised">
-            <View style={{ gap: theme.space[16] }}>
-              <TextField
-                label="Email"
-                value={email}
-                onChangeText={setEmail}
-                placeholder="you@email.com"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoComplete="email"
-                textContentType="emailAddress"
-                icon="mail-outline"
-                returnKeyType="next"
-              />
-
-              <TextField
-                label="Password"
-                value={password}
-                onChangeText={setPassword}
-                placeholder="Your password"
-                secureTextEntry
-                autoCapitalize="none"
-                autoComplete="password"
-                textContentType="password"
-                icon="lock-closed-outline"
-                returnKeyType="go"
-                onSubmitEditing={handleSubmit}
-              />
-
-              {error ? (
-                <View
-                  style={{
-                    backgroundColor: theme.colors.dangerSubtle,
-                    borderColor: theme.colors.dangerBorder,
-                    borderWidth: 0.5,
-                    borderRadius: theme.radius.md,
-                    padding: theme.space[12],
-                  }}
-                >
-                  <Text token="caption" color={theme.colors.dangerText}>
-                    {error}
-                  </Text>
-                </View>
-              ) : null}
-
-              <Button
-                label="Sign in"
-                onPress={handleSubmit}
-                loading={busy}
-                disabled={!canSubmit}
-                fullWidth
-              />
-
-              <Button
-                label="Forgot your password?"
-                variant="ghost"
-                size="sm"
-                onPress={() => router.push('/forgot-password')}
-              />
+        <Card variant="raised" style={{ borderColor: theme.colors.primaryBorder }}>
+          <View style={{ gap: theme.space[16] }}>
+            <View style={{ gap: theme.space[4] }}>
+              <Text token="micro" color={theme.colors.textSecondary}>
+                SIGN IN WITH GOOGLE
+              </Text>
+              <Text token="caption" color={theme.colors.textMuted}>
+                Use your Google account to securely continue to {APP_NAME}.
+              </Text>
             </View>
-          </Card>
 
-          <View style={{ alignItems: 'center', gap: theme.space[4] }}>
-            <Text token="caption" color={theme.colors.textMuted}>
-              New to Tutor Hunt?
-            </Text>
+            {displayedError ? (
+              <View
+                style={{
+                  backgroundColor: theme.colors.dangerSubtle,
+                  borderColor: theme.colors.dangerBorder,
+                  borderWidth: 0.5,
+                  borderRadius: theme.radius.md,
+                  padding: theme.space[12],
+                }}
+              >
+                <Text token="caption" color={theme.colors.dangerText}>
+                  {displayedError}
+                </Text>
+              </View>
+            ) : null}
+
             <Button
-              label="Create an account"
-              variant="secondary"
-              onPress={() => router.push('/register')}
+              label="Continue with Google"
+              icon="logo-google"
+              onPress={handleSubmit}
+              loading={busy}
+              disabled={busy}
+              size="lg"
+              fullWidth
             />
+
+            <Text token="caption" color={theme.colors.textMuted}>
+              New users start with a tutor workspace after signing in.
+            </Text>
           </View>
+        </Card>
+
+        <View
+          style={{
+            alignItems: 'center',
+            gap: theme.space[8],
+            paddingBottom: theme.space[8],
+          }}
+        >
+          <Text token="micro" color={theme.colors.textHint}>
+            Your account is secured by Google and Firebase Authentication.
+          </Text>
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </Screen>
   );
 }

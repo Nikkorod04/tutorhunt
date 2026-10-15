@@ -9,7 +9,7 @@
 import { onAuthStateChanged } from 'firebase/auth';
 import { useEffect } from 'react';
 
-import { fetchEntitlement, fetchUserProfile } from '@/services/auth.service';
+import { ensureAccountEntitlement, fetchEntitlement, fetchUserProfile, signOut } from '@/services/auth.service';
 import { getFirebaseAuth, isFirebaseConfigured } from '@/services/firebase';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -18,7 +18,7 @@ export function useAuthBootstrap(): void {
     const {
       setUnconfigured,
       setSignedOut,
-      setNeedsRole,
+      setNeedsProfile,
       setSession,
       setError,
     } = useAuthStore.getState();
@@ -42,12 +42,19 @@ export function useAuthBootstrap(): void {
           const profile = await fetchUserProfile(user.uid);
 
           if (!profile) {
-            // Signed in, but role selection has not happened yet.
-            setNeedsRole(user.uid);
+            // Signed in, but the tutor account has not been created yet.
+            setNeedsProfile(user.uid);
             return;
           }
 
-          const entitlement = await fetchEntitlement(user.uid);
+          let entitlement = await fetchEntitlement(user.uid);
+          if (!entitlement) {
+            // Recover accounts created before onboarding writes were made
+            // atomic, or accounts interrupted between profile and entitlement
+            // creation. Firestore rules only allow the initial Free record.
+            await ensureAccountEntitlement(user.uid);
+            entitlement = await fetchEntitlement(user.uid);
+          }
           setSession(user.uid, profile, entitlement);
         } catch (error) {
           setError(
@@ -55,6 +62,9 @@ export function useAuthBootstrap(): void {
               ? error.message
               : 'Could not load your account. Check your connection.',
           );
+          if (error instanceof Error && 'code' in error && error.code === 'auth/legacy-parent-account') {
+            await signOut();
+          }
           setSignedOut();
         }
       },

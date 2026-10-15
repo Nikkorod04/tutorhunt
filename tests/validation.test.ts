@@ -33,6 +33,7 @@ const NOW = new Date('2026-10-07T12:00:00+08:00');
 function values(over: Partial<StudentFormValues> = {}): StudentFormValues {
   return {
     nickname: 'Ana',
+    gender: 'female',
     birthday: null,
     school: '',
     gradeLevel: '',

@@ -17,8 +17,8 @@ export type AuthStatus =
   /** No Firebase config in .env — the app shows a setup screen. */
   | 'unconfigured'
   | 'signedOut'
-  /** Signed in but users/{uid} does not exist yet, so the role is unknown. */
-  | 'needsRole'
+  /** Signed in but the tutor account document has not been created yet. */
+  | 'needsProfile'
   | 'signedIn';
 
 interface AuthState {
@@ -30,8 +30,9 @@ interface AuthState {
 
   setUnconfigured: () => void;
   setSignedOut: () => void;
-  setNeedsRole: (uid: string) => void;
+  setNeedsProfile: (uid: string) => void;
   setSession: (uid: string, profile: UserProfile, entitlement: Entitlement | null) => void;
+  setProfile: (profile: UserProfile) => void;
   setEntitlement: (entitlement: Entitlement | null) => void;
   setError: (error: string | null) => void;
 }
@@ -48,11 +49,13 @@ export const useAuthStore = create<AuthState>((set) => ({
   setSignedOut: () =>
     set({ status: 'signedOut', firebaseUid: null, profile: null, entitlement: null }),
 
-  setNeedsRole: (uid) =>
-    set({ status: 'needsRole', firebaseUid: uid, profile: null, entitlement: null }),
+  setNeedsProfile: (uid) =>
+    set({ status: 'needsProfile', firebaseUid: uid, profile: null, entitlement: null }),
 
   setSession: (uid, profile, entitlement) =>
     set({ status: 'signedIn', firebaseUid: uid, profile, entitlement, error: null }),
+
+  setProfile: (profile) => set({ profile }),
 
   setEntitlement: (entitlement) => set({ entitlement }),
 

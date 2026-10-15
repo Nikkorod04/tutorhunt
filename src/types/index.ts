@@ -1,4 +1,5 @@
 export * from './common';
+export * from './contact';
 export * from './user';
 export * from './entitlement';
 export * from './student';
@@ -6,7 +7,5 @@ export * from './session';
 export * from './expense';
 export * from './payment';
 export * from './statement';
-export * from './tutorProfile';
-export * from './parentProfile';
-export * from './favorite';
-export * from './parentPost';
+export * from './notification';
+export * from './announcement';

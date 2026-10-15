@@ -40,6 +40,7 @@ let app: FirebaseApp | null = null;
 let authInstance: Auth | null = null;
 let dbInstance: Firestore | null = null;
 let storageInstance: FirebaseStorage | null = null;
+let appCheckConfigured = false;
 
 function requireConfig(): void {
   if (!isFirebaseConfigured) {
@@ -53,6 +54,7 @@ export function getFirebaseApp(): FirebaseApp {
   requireConfig();
   if (!app) {
     app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+    configureWebAppCheck(app);
   }
   return app;
 }
@@ -102,6 +104,29 @@ export function getFileStorage(): FirebaseStorage {
  * error rather than a silent loss of session persistence.
  */
 declare const require: (moduleId: string) => unknown;
+
+/**
+ * Web App Check is opt-in because native Expo builds need a native provider.
+ * Keeping this lazy prevents the browser-only reCAPTCHA module from loading
+ * in Android/iOS bundles.
+ */
+function configureWebAppCheck(firebaseApp: FirebaseApp): void {
+  if (appCheckConfigured || typeof document === 'undefined') return;
+  const siteKey = process.env.EXPO_PUBLIC_FIREBASE_APPCHECK_SITE_KEY;
+  if (!siteKey) return;
+
+  try {
+    const { initializeAppCheck, ReCaptchaV3Provider } = require('firebase/app-check') as typeof import('firebase/app-check');
+    initializeAppCheck(firebaseApp, {
+      provider: new ReCaptchaV3Provider(siteKey),
+      isTokenAutoRefreshEnabled: true,
+    });
+    appCheckConfigured = true;
+  } catch {
+    // App Check must never prevent the app from opening when it is not yet
+    // configured for the current host.
+  }
+}
 
 function getReactNativePersistenceLazy(): unknown {
   const authModule = require('firebase/auth') as {

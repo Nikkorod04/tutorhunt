@@ -1,12 +1,12 @@
-import React, { useMemo, useState } from 'react';
-import { View } from 'react-native';
+import React, { useMemo, useRef, useState } from 'react';
+import { View, type TextInput } from 'react-native';
 
 import { Button, Card, Chip, DateField, SectionHeader, Text, TextField } from '@/components/ui';
 import type { EditableSessionStatus, SessionInput } from '@/services/sessions.service';
 import { useTheme } from '@/theme';
 import type { RateType, Session, Student, TopicCategory } from '@/types';
 import { formatPeso } from '@/utils/currency';
-import { combineManilaDateAndTime, formatTimeInput } from '@/utils/date';
+import { combineManilaDateAndTime, formatDisplayDate, formatDisplayTime, formatTimeInput } from '@/utils/date';
 import { computeDurationMinutes, computeSessionFee, defaultBillableFor } from '@/utils/pricing';
 import {
   issuesByField,
@@ -64,9 +64,12 @@ interface TimeFieldProps {
   value: string;
   error?: string;
   onChange: (value: string) => void;
+  hourInputRef?: React.RefObject<TextInput | null>;
+  minuteInputRef?: React.RefObject<TextInput | null>;
+  nextInputRef?: React.RefObject<TextInput | null>;
 }
 
-function TimeField({ label, value, error, onChange }: TimeFieldProps) {
+function TimeField({ label, value, error, onChange, hourInputRef, minuteInputRef, nextInputRef }: TimeFieldProps) {
   const theme = useTheme();
   const initial = editableTimeParts(value);
   const [hour, setHour] = useState(initial.hour);
@@ -99,11 +102,11 @@ function TimeField({ label, value, error, onChange }: TimeFieldProps) {
       <Text token="caption" color={theme.colors.textSecondary}>{label}</Text>
       <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: theme.space[8] }}>
         <View style={{ width: 64 }}>
-          <TextField value={hour} onChangeText={handleHourChange} placeholder="4" keyboardType="number-pad" maxLength={2} compact error={error} showErrorMessage={false} />
+          <TextField value={hour} onChangeText={handleHourChange} placeholder="4" keyboardType="number-pad" maxLength={2} compact error={error} showErrorMessage={false} inputRef={hourInputRef} returnKeyType="next" onSubmitEditing={() => minuteInputRef?.current?.focus()} />
         </View>
         <Text token="h2" color={theme.colors.textSecondary} style={{ paddingBottom: theme.space[8] }}>:</Text>
         <View style={{ width: 64 }}>
-          <TextField value={minute} onChangeText={handleMinuteChange} placeholder="00" keyboardType="number-pad" maxLength={2} compact error={error} showErrorMessage={false} />
+          <TextField value={minute} onChangeText={handleMinuteChange} placeholder="00" keyboardType="number-pad" maxLength={2} compact error={error} showErrorMessage={false} inputRef={minuteInputRef} returnKeyType="next" onSubmitEditing={() => nextInputRef?.current?.focus()} />
         </View>
         <View style={{ flex: 1, gap: theme.space[4] }}>
           <View style={{ flexDirection: 'row', gap: theme.space[8] }}>
@@ -121,6 +124,7 @@ export interface SessionFormProps {
   students: Student[];
   initial?: Session | null;
   preferredStudentId?: string;
+  mode?: 'full' | 'reschedule';
   submitLabel: string;
   busy?: boolean;
   onSubmit: (input: SessionInput) => void;
@@ -130,6 +134,7 @@ export function SessionForm({
   students,
   initial = null,
   preferredStudentId,
+  mode = 'full',
   submitLabel,
   busy = false,
   onSubmit,
@@ -158,6 +163,13 @@ export function SessionForm({
   const [billable, setBillable] = useState(initial?.billable ?? false);
   const [notes, setNotes] = useState(initial?.notes ?? '');
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const startHourRef = useRef<TextInput>(null);
+  const startMinuteRef = useRef<TextInput>(null);
+  const endHourRef = useRef<TextInput>(null);
+  const endMinuteRef = useRef<TextInput>(null);
+  const subjectRef = useRef<TextInput>(null);
+  const rateRef = useRef<TextInput>(null);
+  const notesRef = useRef<TextInput>(null);
 
   const preview = useMemo(() => {
     const start = parseClockTime(values.startTime);
@@ -206,51 +218,62 @@ export function SessionForm({
 
     const start = parseClockTime(values.startTime)!;
     const end = parseClockTime(values.endTime)!;
+    const rescheduling = mode === 'reschedule' && initial;
     onSubmit({
-      studentId: values.studentId,
+      studentId: rescheduling ? initial.studentId : values.studentId,
       startsAt: combineManilaDateAndTime(values.date!, start.hours, start.minutes),
       endsAt: combineManilaDateAndTime(values.date!, end.hours, end.minutes),
-      subject: values.subject.trim(),
-      topicCategory,
-      topicDetails: values.topicDetails.trim(),
-      notes: notes.trim(),
-      rateType,
-      appliedRate: parseRate(values.appliedRate)!,
-      status,
-      billable,
+      subject: rescheduling ? initial.subject : values.subject.trim(),
+      topicCategory: rescheduling ? initial.topicCategory : topicCategory,
+      topicDetails: rescheduling ? initial.topicDetails : values.topicDetails.trim(),
+      notes: rescheduling ? initial.notes : notes.trim(),
+      rateType: rescheduling ? initial.rateType : rateType,
+      appliedRate: rescheduling ? initial.appliedRate : parseRate(values.appliedRate)!,
+      status: rescheduling ? 'scheduled' : status,
+      billable: rescheduling ? false : billable,
     });
   }
 
   return (
     <View style={{ gap: theme.space[24] }}>
       <Card variant="raised">
-        <SectionHeader title="Student and schedule" />
+        <SectionHeader title={mode === 'reschedule' ? 'New schedule' : 'Student and schedule'} />
         <View style={{ gap: theme.space[16] }}>
-          <View style={{ gap: theme.space[8] }}>
-            <Text token="caption" color={theme.colors.textSecondary}>Student</Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.space[8] }}>
-              {students.map((student) => (
-                <Chip
-                  key={student.id}
-                  label={student.nickname}
-                  variant="filter"
-                  selected={values.studentId === student.id}
-                  onPress={() => chooseStudent(student)}
-                />
-              ))}
+          {mode === 'reschedule' && initial ? (
+            <Card variant="flat">
+              <View style={{ gap: theme.space[4] }}>
+                <Text token="micro" color={theme.colors.textMuted}>CURRENT SESSION</Text>
+                <Text token="bodyStrong">{formatDisplayDate(initial.startsAt)} · {formatDisplayTime(initial.startsAt)} – {formatDisplayTime(initial.endsAt)}</Text>
+                <Text token="caption" color={theme.colors.textSecondary}>Student, lesson details, rate and notes will stay unchanged.</Text>
+              </View>
+            </Card>
+          ) : (
+            <View style={{ gap: theme.space[8] }}>
+              <Text token="caption" color={theme.colors.textSecondary}>Student</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.space[8] }}>
+                {students.map((student) => (
+                  <Chip
+                    key={student.id}
+                    label={student.nickname}
+                    variant="filter"
+                    selected={values.studentId === student.id}
+                    onPress={() => chooseStudent(student)}
+                  />
+                ))}
+              </View>
+              {errors.studentId ? <Text token="caption" color={theme.colors.danger}>{errors.studentId}</Text> : null}
             </View>
-            {errors.studentId ? <Text token="caption" color={theme.colors.danger}>{errors.studentId}</Text> : null}
-          </View>
-          <DateField label="Date" value={values.date} onChange={(date) => update('date', date)} error={errors.date} />
-          <TimeField label="Start time" value={values.startTime} onChange={(value) => update('startTime', value)} error={errors.startTime} />
-          <TimeField label="End time" value={values.endTime} onChange={(value) => update('endTime', value)} error={errors.endTime} />
+          )}
+          <DateField label="Date" value={values.date} onChange={(date) => update('date', date)} error={errors.date} pickerOnly />
+          <TimeField label="Start time" value={values.startTime} onChange={(value) => update('startTime', value)} error={errors.startTime} hourInputRef={startHourRef} minuteInputRef={startMinuteRef} nextInputRef={endHourRef} />
+          <TimeField label="End time" value={values.endTime} onChange={(value) => update('endTime', value)} error={errors.endTime} hourInputRef={endHourRef} minuteInputRef={endMinuteRef} nextInputRef={mode === 'reschedule' ? undefined : subjectRef} />
         </View>
       </Card>
 
-      <Card variant="raised">
+      {mode !== 'reschedule' ? <Card variant="raised">
         <SectionHeader title="Lesson" />
         <View style={{ gap: theme.space[16] }}>
-          <TextField label="Subject" value={values.subject} onChangeText={(value) => update('subject', value)} placeholder="Mathematics" icon="book-outline" maxLength={LIMITS.subject} error={errors.subject} />
+          <TextField label="Subject" value={values.subject} onChangeText={(value) => update('subject', value)} placeholder="Mathematics" icon="book-outline" maxLength={LIMITS.subject} error={errors.subject} inputRef={subjectRef} returnKeyType="next" onSubmitEditing={() => rateRef.current?.focus()} />
           <View style={{ gap: theme.space[8] }}>
             <Text token="caption" color={theme.colors.textSecondary}>Topic category</Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.space[8] }}>
@@ -258,15 +281,15 @@ export function SessionForm({
             </View>
           </View>
         </View>
-      </Card>
+      </Card> : null}
 
-      <Card variant="raised">
+      {mode !== 'reschedule' ? <Card variant="raised">
         <SectionHeader title="Fee" />
         <View style={{ gap: theme.space[16] }}>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.space[8] }}>
             {RATE_TYPES.map((type) => <Chip key={type.value} label={type.label} variant="filter" selected={rateType === type.value} onPress={() => setRateType(type.value)} />)}
           </View>
-          <TextField label={rateType === 'hourly' ? 'Rate per hour' : 'Rate per session'} value={values.appliedRate} onChangeText={(value) => update('appliedRate', value)} placeholder="350" keyboardType="decimal-pad" icon="cash-outline" error={errors.appliedRate} />
+          <TextField label={rateType === 'hourly' ? 'Rate per hour' : 'Rate per session'} value={values.appliedRate} onChangeText={(value) => update('appliedRate', value)} placeholder="350" keyboardType="decimal-pad" icon="cash-outline" error={errors.appliedRate} inputRef={rateRef} returnKeyType="next" onSubmitEditing={() => notesRef.current?.focus()} />
           {preview ? (
             <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
               <Text token="caption" color={theme.colors.textMuted}>{preview.durationMinutes} minutes</Text>
@@ -274,7 +297,7 @@ export function SessionForm({
             </View>
           ) : null}
         </View>
-      </Card>
+      </Card> : null}
 
       <Card variant="raised">
         <SectionHeader title="Status" />
@@ -286,7 +309,7 @@ export function SessionForm({
             <Chip label="Charge this session" icon="cash-outline" variant="filter" selected={billable} onPress={() => setBillable((value) => !value)} />
           ) : null}
           {status === 'completed' ? <Text token="caption" color={theme.colors.successText}>Completed sessions are charged automatically.</Text> : null}
-          <TextField label="Notes" value={notes} onChangeText={setNotes} placeholder="Private session notes" multiline maxLength={LIMITS.notes} showCounter error={errors.notes} />
+          <TextField label="Notes" value={notes} onChangeText={setNotes} placeholder="Private session notes" multiline maxLength={LIMITS.notes} showCounter error={errors.notes} inputRef={notesRef} />
         </View>
       </Card>
 

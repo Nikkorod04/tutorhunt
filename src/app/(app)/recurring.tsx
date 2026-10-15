@@ -2,8 +2,8 @@ import { router } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import { View } from 'react-native';
 
-import { Badge, Button, Card, Chip, EmptyState, Screen, Skeleton, Text } from '@/components/ui';
-import { RecordListCard, RecordListSummary } from '@/components/RecordList';
+import { Badge, Button, Card, Chip, EmptyState, Screen, Skeleton, Text, TopAppBar } from '@/components/ui';
+import { RecordListCard } from '@/components/RecordList';
 import { activePlanFor } from '@/constants/plans';
 import { listRecurringSeries, recurringErrorMessage } from '@/services/recurring.service';
 import { listStudents } from '@/services/students.service';
@@ -35,6 +35,7 @@ export default function RecurringSessionsScreen() {
   const profile = useAuthStore((state) => state.profile);
   const entitlement = useAuthStore((state) => state.entitlement);
   const plan = activePlanFor(entitlement);
+  const header = <TopAppBar title="Recurring sessions" />;
   const [items, setItems] = useState<RecurringSeries[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
@@ -62,7 +63,7 @@ export default function RecurringSessionsScreen() {
 
   if (loading) {
     return (
-      <Screen scroll>
+      <Screen scroll header={header}>
         <View style={{ paddingTop: theme.space[8], gap: theme.space[16] }}>
           <Skeleton width="48%" />
           <Skeleton variant="card" height={142} />
@@ -75,16 +76,12 @@ export default function RecurringSessionsScreen() {
 
   if (plan !== 'pro') {
     return (
-      <Screen scroll>
+      <Screen scroll header={header}>
         <View style={{ paddingTop: theme.space[8], gap: theme.space[16] }}>
-          <View style={{ gap: theme.space[4] }}>
-            <Text token="h1">Recurring sessions</Text>
-            <Text token="caption" color={theme.colors.textMuted}>Keep weekly tutoring schedules organized in one place.</Text>
-          </View>
           <Card variant="premium">
             <EmptyState
               icon="repeat-outline"
-              title="Recurring sessions are a Pro feature"
+              title="Recurring sessions is a Pro feature"
               description="Create weekly sessions, skip holidays, and manage an entire series from one place."
               action={<Button label="View Pro plans" icon="star-outline" onPress={() => router.push('/upgrade' as never)} />}
             />
@@ -95,28 +92,15 @@ export default function RecurringSessionsScreen() {
   }
 
   const studentName = (id: string) => students.find((student) => student.id === id)?.nickname ?? 'Student';
-  const activeCount = items.filter((item) => item.status === 'active').length;
-
   return (
-    <Screen scroll>
+    <Screen scroll header={header}>
       <View style={{ paddingTop: theme.space[8], gap: theme.space[16] }}>
         <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: theme.space[12] }}>
           <View style={{ flex: 1, gap: theme.space[4] }}>
-            <Text token="h1">Recurring sessions</Text>
             <Text token="caption" color={theme.colors.textMuted}>Manage weekly session series and future dates.</Text>
           </View>
           <Button label="New" icon="add" size="sm" onPress={() => router.push('/recurring-new' as never)} />
         </View>
-
-        {items.length > 0 ? (
-          <RecordListSummary
-            icon="repeat-outline"
-            label="WEEKLY SERIES"
-            value={`${activeCount} active`}
-            description={`${items.length} series in your recurring schedule.`}
-            aside={<Badge label="Pro" variant="plan" tone="premium" />}
-          />
-        ) : null}
 
         {error ? <Card variant="accent"><Text token="caption" color={theme.colors.warningText}>{error}</Text></Card> : null}
 

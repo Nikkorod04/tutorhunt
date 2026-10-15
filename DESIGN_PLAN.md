@@ -1,9 +1,10 @@
-# TUTOR HUNT — DESIGN PLAN
+# TUTOR BUDDY — DESIGN PLAN
 
 Version: 1.0
 Companion to: Tutor_Hunt_SYSTEM_BLUEPRINT.txt (v1.2)
 Target: Expo SDK 57 / React Native / TypeScript / Expo Go
-Status: to be implemented during Phase 1
+Status: Tutor-only migration applied; older marketplace references are retained
+only as historical design context.
 
 AUTHORITY
 The system blueprint remains the source of truth for architecture, data and
@@ -15,10 +16,14 @@ appear to conflict on a visual matter, this document wins.
 
 ## 1. PURPOSE
 
-Tutor Hunt must not look like a stock component library or a bare utility app.
-It is used by tutors to record money and by parents to judge whether a stranger
-is safe to teach their child. It therefore has to feel trustworthy and calm,
+Tutor Buddy must not look like a stock component library or a bare utility app.
+It is used by tutors to manage students, sessions, finances, and statements.
+It therefore has to feel trustworthy and calm,
 while still feeling modern and warm rather than corporate.
+
+Tutor Buddy is now a tutor-only product. Any parent or marketplace references
+that remain in this legacy design document are historical context, not active
+product scope.
 
 The goal of this plan is consistency first: one source of tokens, one component
 kit, one motion vocabulary. Distinctiveness comes from disciplined repetition of

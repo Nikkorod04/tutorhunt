@@ -1,4 +1,4 @@
-import type { ContactPreference } from '../types/tutorProfile';
+import type { ContactPreference } from '@/types';
 
 export type ContactActionIcon =
   | 'chatbubble-ellipses-outline'
@@ -43,7 +43,7 @@ export function contactHelper(preference: ContactPreference): string {
   if (preference === 'messenger') return 'Use a Messenger profile link, such as m.me/username.';
   if (preference === 'facebook') return 'Use a Facebook profile link, such as facebook.com/username.';
   if (preference === 'phone') return 'Use an 11-digit Philippine mobile number starting with 09.';
-  return 'Use an email address that parents or tutors can reach.';
+  return 'Use an email address that people can reach you at.';
 }
 
 export function contactValidationError(preference: ContactPreference, rawValue: string): string | null {
@@ -68,12 +68,8 @@ export function contactValidationError(preference: ContactPreference, rawValue: 
 
 export function normalizeContactValue(preference: ContactPreference, rawValue: string): string {
   const value = rawValue.trim();
-  if (preference === 'messenger') {
-    return `https://m.me/${contactPath(value, MESSENGER_PATTERN) ?? value}`;
-  }
-  if (preference === 'facebook') {
-    return `https://facebook.com/${contactPath(value, FACEBOOK_PATTERN) ?? value}`;
-  }
+  if (preference === 'messenger') return `https://m.me/${contactPath(value, MESSENGER_PATTERN) ?? value}`;
+  if (preference === 'facebook') return `https://facebook.com/${contactPath(value, FACEBOOK_PATTERN) ?? value}`;
   if (preference === 'phone') return normalizedPhone(value);
   return value.toLowerCase();
 }

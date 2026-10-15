@@ -15,9 +15,10 @@ import {
   Skeleton,
   Text,
   TextField,
+  TopAppBar,
   useToast,
 } from '@/components/ui';
-import { FormHeader } from '@/components/FormHeader';
+import { useSubmitGuard } from '@/hooks/useSubmitGuard';
 import { ensureEntitlement } from '@/services/entitlements.service';
 import {
   calculateStatementTotals,
@@ -39,6 +40,7 @@ import { expenseTotal, sessionCharge } from '@/utils/pricing';
 import { formatPesoCompact } from '@/utils/currency';
 import { formatDisplayDate, manilaParts, parseIsoDate } from '@/utils/date';
 import { renderStatementHtml } from '@/utils/statementHtml';
+import { showToastAfterNavigation } from '@/utils/feedback';
 
 function monthStart(date: Date): Date {
   const parts = manilaParts(date);
@@ -105,6 +107,7 @@ export default function StatementNewScreen() {
   const cachedEntitlement = useAuthStore((state) => state.entitlement);
   const setEntitlement = useAuthStore((state) => state.setEntitlement);
   const { showToast } = useToast();
+  const { beginSubmit, endSubmit } = useSubmitGuard();
   const [entitlement, setLocalEntitlement] = useState(cachedEntitlement);
   const [students, setStudents] = useState<Student[]>([]);
   const [studentId, setStudentId] = useState(preferredStudentId ?? '');
@@ -238,9 +241,12 @@ export default function StatementNewScreen() {
       setError('Select at least one session or expense for the statement.');
       return;
     }
-
+    if (!beginSubmit()) return;
     setBusy(true);
     setError(null);
+    let savedStatement: Statement | null = null;
+    let pdfUri: string | null = null;
+    let leavingScreen = false;
     try {
       const generatedAt = new Date();
       const statementNumber = await nextStatementNumber(profile.uid, generatedAt);
@@ -260,6 +266,7 @@ export default function StatementNewScreen() {
         notes,
       });
       const pdf = await Print.printToFileAsync({ html });
+      pdfUri = pdf.uri;
       const input = {
         studentId,
         periodStart,
@@ -272,22 +279,28 @@ export default function StatementNewScreen() {
         amountPaidAtIssue: candidates.amountPaidAtIssue,
         notes,
       };
-      const result = reissueSource
-        ? { statement: await reissueStatement(profile.uid, reissueSource.id, input, statementNumber, generatedAt) }
-        : await generateStatement(profile.uid, input, entitlement!, statementNumber, generatedAt);
-      if (!reissueSource && 'entitlement' in result) {
+      if (reissueSource) {
+        savedStatement = await reissueStatement(profile.uid, reissueSource.id, input, statementNumber, generatedAt);
+      } else {
+        const result = await generateStatement(profile.uid, input, entitlement!, statementNumber, generatedAt);
+        savedStatement = result.statement;
         setLocalEntitlement(result.entitlement);
         setEntitlement(result.entitlement);
       }
-      showToast(reissueSource ? 'Statement reissued successfully' : 'Statement generated successfully');
-      router.replace({ pathname: '/statement-detail', params: { id: result.statement.id, pdfUri: pdf.uri } } as never);
+      leavingScreen = Boolean(savedStatement && pdfUri);
     } catch (caught) {
       const message = statementErrorMessage(caught);
       setError(message);
       showToast(message, 'danger');
+      return;
     } finally {
-      setBusy(false);
+      endSubmit();
+      if (!leavingScreen) setBusy(false);
     }
+
+    if (!savedStatement || !pdfUri) return;
+    router.replace({ pathname: '/statement-detail', params: { id: savedStatement.id, pdfUri } } as never);
+    showToastAfterNavigation(showToast, reissueSource ? 'Statement reissued successfully' : 'Statement generated successfully');
   }
 
   if (loadingStudents) {
@@ -299,14 +312,13 @@ export default function StatementNewScreen() {
   }
 
   return (
-    <Screen scroll>
+    <Screen scroll header={<TopAppBar title={reissueSource ? 'Reissue statement' : 'Generate statement'} onBack={() => router.back()} />}>
       <View style={{ paddingTop: theme.space[8], gap: theme.space[24] }}>
-        <FormHeader
-          eyebrow="PARENT STATEMENT"
-          title={reissueSource ? 'Reissue statement' : 'Generate statement'}
-          description={reissueSource ? `Correct ${reissueSource.statementNumber} before creating its replacement.` : 'Choose the sessions and reimbursable expenses to include.'}
-          icon="document-text-outline"
-        />
+        <Card variant="flat">
+          <Text token="caption" color={theme.colors.textSecondary}>
+            {reissueSource ? `Correct ${reissueSource.statementNumber} before creating its replacement.` : 'Choose the sessions and reimbursable expenses to include.'}
+          </Text>
+        </Card>
 
         {error ? <Card variant="flat"><Text token="caption" color={theme.colors.dangerText}>{error}</Text></Card> : null}
 
@@ -327,8 +339,8 @@ export default function StatementNewScreen() {
                 {students.map((student) => <Chip key={student.id} label={student.nickname} selected={student.id === studentId} onPress={reissueSource ? undefined : () => setStudentId(student.id)} />)}
               </View>
             </View>
-            <DateField label="Period starts" value={periodStart} onChange={setPeriodStart} />
-            <DateField label="Period ends" value={periodEnd} onChange={setPeriodEnd} />
+            <DateField label="Period starts" value={periodStart} onChange={setPeriodStart} pickerOnly />
+            <DateField label="Period ends" value={periodEnd} onChange={setPeriodEnd} pickerOnly />
             <TextField label="Note (optional)" value={notes} onChangeText={setNotes} placeholder="Thank you for your continued support." multiline maxLength={1000} showCounter />
           </View>
         </Card>

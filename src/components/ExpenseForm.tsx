@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View } from 'react-native';
+import React, { useRef, useState } from 'react';
+import { View, type TextInput } from 'react-native';
 
 import { EXPENSE_CATEGORIES } from '@/constants/expenses';
 import {
@@ -56,6 +56,9 @@ export function ExpenseForm({
     reimbursable: initial?.reimbursable ?? false,
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const titleRef = useRef<TextInput>(null);
+  const amountRef = useRef<TextInput>(null);
+  const notesRef = useRef<TextInput>(null);
 
   function update<K extends keyof ExpenseFormValues>(key: K, value: ExpenseFormValues[K]) {
     setValues((current) => ({ ...current, [key]: value }));
@@ -116,6 +119,9 @@ export function ExpenseForm({
             onChangeText={(value) => update('title', value)}
             placeholder="Jeepney fare"
             icon="receipt-outline"
+            inputRef={titleRef}
+            returnKeyType="next"
+            onSubmitEditing={() => amountRef.current?.focus()}
             autoCapitalize="sentences"
             maxLength={LIMITS.expenseTitle}
             error={errors.title}
@@ -143,6 +149,9 @@ export function ExpenseForm({
             placeholder="40"
             keyboardType="decimal-pad"
             icon="cash-outline"
+            inputRef={amountRef}
+            returnKeyType="next"
+            onSubmitEditing={() => notesRef.current?.focus()}
             error={errors.amountPerOccurrence}
           />
         </View>
@@ -192,7 +201,7 @@ export function ExpenseForm({
           </View>
           {errors.studentId ? <Text token="caption" color={theme.colors.danger}>{errors.studentId}</Text> : null}
           <Chip
-            label="Reimbursable by parent"
+            label="Reimbursable by client"
             icon="cash-outline"
             selected={values.reimbursable}
             onPress={() => update('reimbursable', !values.reimbursable)}
@@ -205,6 +214,7 @@ export function ExpenseForm({
         <View style={{ gap: theme.space[16] }}>
           <TextField
             label="Notes"
+            inputRef={notesRef}
             value={values.notes}
             onChangeText={(value) => update('notes', value)}
             placeholder="Anything worth remembering."

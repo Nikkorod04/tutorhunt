@@ -16,8 +16,8 @@ import {
   type QueryDocumentSnapshot,
 } from 'firebase/firestore';
 
-import { PLAN_LIMITS } from '@/constants/plans';
-import { isPro, quotaState, type QuotaState } from '@/services/entitlements.service';
+import { activePlanFor, limitsFor } from '@/constants/plans';
+import { quotaState, type QuotaState } from '@/services/entitlements.service';
 import type { Entitlement, Expense, Session, Statement } from '@/types';
 import {
   expenseTotal,
@@ -194,8 +194,7 @@ export function statementQuotaState(
   entitlement: Entitlement,
   now: Date = new Date(),
 ): QuotaState {
-  const limit = isPro(entitlement, now) ? Number.POSITIVE_INFINITY : PLAN_LIMITS.free.monthlyPdfs;
-  return quotaState(entitlement, limit, now);
+  return quotaState(entitlement, limitsFor(activePlanFor(entitlement, now)).monthlyPdfs, now);
 }
 
 export interface GenerateStatementInput {
@@ -261,11 +260,16 @@ export async function generateStatement(
     const proUntil = entitlementData.proUntil === null || entitlementData.proUntil === undefined
       ? null
       : toDate(entitlementData.proUntil);
-    const activePro = entitlementData.plan === 'pro'
-      && (proUntil === null || proUntil.getTime() > generatedAt.getTime());
-    const limit = activePro ? Number.POSITIVE_INFINITY : PLAN_LIMITS.free.monthlyPdfs;
+    const activePlan = activePlanFor({
+      plan: entitlementData.plan === 'pro' ? 'pro' : 'free',
+      proUntil,
+    }, generatedAt);
+    const limit = limitsFor(activePlan).monthlyPdfs;
     const used = storedMonth === month ? storedUsage : 0;
     if (Number.isFinite(limit) && used >= limit) throw new StatementQuotaError();
+    if (input.expenseIds.length > 0 && !limitsFor(activePlan).reimbursementTracking) {
+      throw new Error('Reimbursement tracking is available on the Pro plan.');
+    }
 
     const expenseSnapshots = [];
     for (const expenseRef of expenseRefs) {

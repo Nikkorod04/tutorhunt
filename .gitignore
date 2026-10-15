@@ -45,3 +45,7 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Google native sign-in configuration files
+google-services.json
+GoogleService-Info.plist

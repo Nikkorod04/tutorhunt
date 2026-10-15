@@ -5,7 +5,7 @@
  * exists only to verify that every gate reads from here.
  */
 
-import type { Entitlement, Plan } from '@/types';
+import type { Entitlement, Plan } from '../types';
 
 export interface PlanLimits {
   /** Only students with status "active" count. */
@@ -23,7 +23,7 @@ export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
     maxActiveStudents: 2,
     monthlyPdfs: 2,
     recurringSessions: false,
-    reimbursementTracking: false,
+    reimbursementTracking: true,
     advancedAnalytics: false,
     studentProgress: false,
     customStatements: false,
@@ -53,6 +53,12 @@ export function activePlanFor(
   if (entitlement?.plan !== 'pro') return 'free';
   if (entitlement.proUntil && entitlement.proUntil.getTime() <= now.getTime()) return 'free';
   return 'pro';
+}
+
+/** Whole days of active access remaining, rounded up for user-facing copy. */
+export function daysUntilProExpiry(expiry: Date | null | undefined, now: Date = new Date()): number | null {
+  if (!expiry) return null;
+  return Math.ceil((expiry.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
 }
 
 /** Pricing is not final and must stay configurable. Blueprint section 5. */

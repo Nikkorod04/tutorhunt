@@ -1,7 +1,8 @@
 TUTOR HUNT
 SYSTEM BLUEPRINT
-Version: 1.2
-Revision: 1.2 — every change from v1.0 is listed in Section 55 (Changelog)
+Version: 1.3
+Revision: 1.3 — tutor-only product scope and migration status are recorded in
+Section 55 (Changelog)
 Companion document: DESIGN_PLAN.md — the authority for colour, typography,
 spacing, radius, elevation, motion and component states
 Target Platform: Expo Go / React Native
@@ -19,20 +20,19 @@ Navigation: Expo Router
 1. PROJECT OVERVIEW
 ============================================================
 
-Tutor Hunt is a mobile application designed for tutors and parents.
+Tutor Buddy is a tutor-only mobile application for tutors across the
+Philippines. Tutors can manage students, tutoring sessions, expenses,
+payments, reimbursements, earnings, recurring sessions and professional
+statements.
 
-The application has two major purposes:
+The former Tutor Hunt marketplace scope (parent accounts, public tutor
+profiles, tutor discovery, favourites and parent request posts) has been
+retired. It is preserved in the earlier blueprint sections as historical
+context only and is not part of the active product, routes, or data writes.
 
-1. Tutor Management
-   Tutors can manage their students, tutoring sessions, expenses, payments,
-   reimbursements, earnings, and parent statements.
-
-2. Tutor Marketplace
-   Parents can browse available tutors and post tutoring requests.
-   Tutors can browse parent requests and publish their own public tutor profile.
-
-The system should initially focus on Tacloban City but must be structured so
-other cities and municipalities can be added later.
+The app is nationwide by design. Student guardian details remain private
+tutor-managed record fields; they do not create parent accounts or a public
+marketplace.
 
 The application should prioritize:
 - simplicity
@@ -171,26 +171,17 @@ FREE TUTOR PLAN
 - basic expenses
 - basic earnings summary
 - maximum 2 PDF statements per month
-- public tutor profile
-- browse parent requests
-- contact parents
-- browse marketplace
+- personal expense tracking
 
 PRO TUTOR PLAN
 - unlimited active students
 - unlimited PDF statements
 - recurring sessions
-- advanced expense management
 - reimbursement tracking
-- advanced earnings analytics
-- student progress tracking
-- custom statement options
-- additional marketplace features in future
+- all current tutor-management features
 
-Do not permanently lock the entire app after a trial.
-
-Optional:
-A 15-day Pro trial can be added later, but Free must remain usable.
+There is no automatic trial in the current plan. Free remains usable without
+an expiry, and Pro is activated manually after payment confirmation.
 
 ENFORCEMENT (v1.1)
 Plan limits are enforced in two places, never only in the UI:
@@ -201,12 +192,12 @@ Plan limits are enforced in two places, never only in the UI:
 The UI must still show the limit clearly, but the UI is not the enforcement
 layer.
 
-Recommended initial pricing concept only:
-- 1 month: PHP 29
-- 6 months: PHP 99
-- 1 year: PHP 149 to PHP 199
+Current pricing:
+- 30 days: PHP 29
+- 6 months: PHP 149
+- 1 year: PHP 249
 
-Pricing is NOT final and must remain configurable.
+Pricing remains configurable in src/constants/plans.ts.
 
 ============================================================
 6. SUBSCRIPTION / ENTITLEMENT DESIGN
@@ -1988,6 +1979,27 @@ TutorHunt/
 47. BUILD PHASES
 ============================================================
 
+TUTOR BUDDY SCOPE UPDATE
+
+The original v1 build list below described Tutor Hunt as a two-sided
+marketplace. The active Tutor Buddy build uses the following interpretation:
+
+- Phases 1–7 are the active tutor-management foundation and are implemented
+  to the extent recorded in README.md.
+- The original Phases 8–10 are retired and must not be implemented: public
+  tutor profiles, parent accounts, favourites, tutor discovery, and parent
+  request posts are out of scope.
+- Phase 4 of the tutor-only migration is the non-destructive data and security
+  cleanup: old marketplace documents are left in place for safe archival, but
+  app routes, client services, indexes, storage paths, notification types and
+  Firestore access rules no longer expose or write them.
+- Phases 11–12 remain the follow-up hardening work described below.
+
+The phase headings and task lists for the retired marketplace phases are kept
+as historical requirements so the v1 design decisions remain traceable.
+
+------------------------------------------------------------
+
 PHASE 1 - PROJECT FOUNDATION
 
 Goal:
@@ -2145,10 +2157,11 @@ Tasks:
 
 ------------------------------------------------------------
 
-PHASE 8 - TUTOR PUBLIC PROFILE
+PHASE 8 - RETIRED: TUTOR PUBLIC PROFILE
 
-Goal:
-Tutor can appear publicly.
+Status:
+Retired by the Tutor Buddy tutor-only migration. Do not implement these
+marketplace tasks.
 
 Tasks:
 - tutorProfiles collection
@@ -2163,10 +2176,11 @@ Tasks:
 
 ------------------------------------------------------------
 
-PHASE 9 - PARENT ACCOUNTS
+PHASE 9 - RETIRED: PARENT ACCOUNTS
 
-Goal:
-Parents can use Tutor Hunt.
+Status:
+Retired by the Tutor Buddy tutor-only migration. Do not implement these
+marketplace tasks.
 
 Tasks:
 - parent navigation
@@ -2180,10 +2194,11 @@ Tasks:
 
 ------------------------------------------------------------
 
-PHASE 10 - PARENT REQUEST POSTS
+PHASE 10 - RETIRED: PARENT REQUEST POSTS
 
-Goal:
-Parents can post tutor requests.
+Status:
+Retired by the Tutor Buddy tutor-only migration. Do not implement these
+marketplace tasks.
 
 Tasks:
 - parentPosts collection
@@ -2212,6 +2227,13 @@ Tasks:
 - prevent client from granting itself Pro
 - prepare backend entitlement path
 
+Status:
+Implemented for the current manual-activation model. Free/Pro limits are
+centralized, enforced in services as well as the UI, Pro expiry is handled,
+reimbursement tracking is Pro-only, and renewal extends an active entitlement
+from its existing expiry. Backend deployment and final live-account QA remain
+operational follow-up steps.
+
 ------------------------------------------------------------
 
 PHASE 12 - SAFETY / ADMIN PREPARATION
@@ -2230,6 +2252,13 @@ Tasks:
 - full account deletion with recursive subcollection delete
 - Storage cleanup on delete and replace
 
+Status:
+Implemented for the tutor-only product: suspension is enforced by Rules,
+account/record report and verification-request schemas are reserved, the
+trusted deleteMyAccount backend removes private Firestore and Storage data,
+and web App Check is opt-in through a reCAPTCHA site key. Native App Check and
+live deployment/verification remain operational follow-up work.
+
 ============================================================
 48. MVP DEFINITION
 ============================================================
@@ -2245,17 +2274,8 @@ TUTOR:
 - can record payments
 - can view monthly totals
 - can create PDF statement
-- can publish public tutor profile
-- can browse parent requests
-
-PARENT:
-- can register/login
-- can browse tutors
-- can open tutor profiles
-- can favorite tutors
-- can create tutor request
-- can edit/close request
-- can contact tutors externally
+- can manage recurring sessions when entitled
+- can manage private tutor settings and notification preferences
 
 SYSTEM:
 - has Firebase Security Rules, tested against the emulator
@@ -2287,6 +2307,7 @@ Do NOT build these initially:
 - social feed
 - achievement/gamification
 - parent-to-tutor in-app wallet
+- complex public marketplace
 - complex admin dashboard
 
 These can be added after validation.
@@ -2503,6 +2524,20 @@ When using an AI coding agent, follow these instructions:
 ============================================================
 
 Every change from v1.0 onward is listed below, with the section it affects.
+
+------------------------------------------------------------
+v1.2 to v1.3 — TUTOR-ONLY MIGRATION
+------------------------------------------------------------
+
+- 1 Renamed the active product to Tutor Buddy and changed the product scope
+  from a two-sided Tutor Hunt marketplace to nationwide tutor management.
+- 47 Retired the public tutor profile, parent account and parent request post
+  phases. Student guardian fields remain private tutor record data.
+- 31, 32, 34 and 35 Removed active client access to marketplace collections,
+  public profile storage, marketplace indexes and tutor-interest notifications.
+  Existing legacy documents are intentionally preserved for archival or a
+  future migration; this change is non-destructive.
+- 48 Replaced marketplace MVP requirements with the tutor-management MVP.
 
 ------------------------------------------------------------
 v1.1 to v1.2 — DESIGN SYSTEM

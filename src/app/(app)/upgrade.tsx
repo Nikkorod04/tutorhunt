@@ -4,10 +4,10 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useMemo, useState } from 'react';
 import { Alert, Image, View } from 'react-native';
 
-import { Button, Card, Chip, PlanBadge, Screen, Text } from '@/components/ui';
+import { Button, Card, Chip, PlanBadge, Screen, Text, TopAppBar } from '@/components/ui';
 import { ILLUSTRATIONS } from '@/constants/illustrations';
 import { OWNER_CONTACT } from '@/constants/owner';
-import { activePlanFor, PRICING } from '@/constants/plans';
+import { activePlanFor, daysUntilProExpiry, PLAN_LIMITS, PRICING } from '@/constants/plans';
 import { useAuthStore } from '@/stores/authStore';
 import { useTheme } from '@/theme';
 import { formatPeso, formatPesoCompact } from '@/utils/currency';
@@ -17,10 +17,6 @@ const PRO_FEATURES = [
   { label: 'Unlimited active students', icon: 'people-outline' as const },
   { label: 'Unlimited PDF statements', icon: 'document-text-outline' as const },
   { label: 'Recurring weekly sessions', icon: 'repeat-outline' as const },
-  { label: 'Reimbursement tracking', icon: 'wallet-outline' as const },
-  { label: 'Advanced analytics', icon: 'trending-up-outline' as const },
-  { label: 'Student progress tools', icon: 'school-outline' as const },
-  { label: 'Custom statements', icon: 'create-outline' as const },
 ] as const;
 
 const PLAN_MONTHS: Record<(typeof PRICING.options)[number]['id'], number> = {
@@ -29,11 +25,39 @@ const PLAN_MONTHS: Record<(typeof PRICING.options)[number]['id'], number> = {
   yearly: 12,
 };
 
+function countLabel(value: number, suffix = ''): string {
+  return Number.isFinite(value) ? `${value}${suffix}` : 'Unlimited';
+}
+
+function featureLabel(enabled: boolean): string {
+  return enabled ? 'Included' : 'Not included';
+}
+
 const COMPARISON = [
-  { label: 'Active students', free: 'Up to 2', pro: 'Unlimited', icon: 'people-outline' as const },
-  { label: 'PDF statements', free: '2 / month', pro: 'Unlimited', icon: 'document-text-outline' as const },
-  { label: 'Recurring sessions', free: 'Not included', pro: 'Included', icon: 'repeat-outline' as const },
-  { label: 'Reimbursement tools', free: 'Not included', pro: 'Included', icon: 'wallet-outline' as const },
+  {
+    label: 'Active students',
+    free: `Up to ${PLAN_LIMITS.free.maxActiveStudents}`,
+    pro: countLabel(PLAN_LIMITS.pro.maxActiveStudents),
+    icon: 'people-outline' as const,
+  },
+  {
+    label: 'PDF statements',
+    free: countLabel(PLAN_LIMITS.free.monthlyPdfs, ' / month'),
+    pro: countLabel(PLAN_LIMITS.pro.monthlyPdfs),
+    icon: 'document-text-outline' as const,
+  },
+  {
+    label: 'Recurring sessions',
+    free: featureLabel(PLAN_LIMITS.free.recurringSessions),
+    pro: featureLabel(PLAN_LIMITS.pro.recurringSessions),
+    icon: 'repeat-outline' as const,
+  },
+  {
+    label: 'Reimbursement tools',
+    free: featureLabel(PLAN_LIMITS.free.reimbursementTracking),
+    pro: featureLabel(PLAN_LIMITS.pro.reimbursementTracking),
+    icon: 'wallet-outline' as const,
+  },
 ] as const;
 
 export default function UpgradeScreen() {
@@ -42,6 +66,8 @@ export default function UpgradeScreen() {
   const profile = useAuthStore((state) => state.profile);
   const activePlan = activePlanFor(entitlement);
   const isPro = activePlan === 'pro';
+  const expiredPro = entitlement?.plan === 'pro' && activePlan === 'free' && Boolean(entitlement.proUntil);
+  const daysRemaining = daysUntilProExpiry(entitlement?.proUntil);
   const [selectedId, setSelectedId] = useState<(typeof PRICING.options)[number]['id']>('yearly');
   const selectedPlan = useMemo(
     () => PRICING.options.find((option) => option.id === selectedId) ?? PRICING.options[2],
@@ -59,7 +85,7 @@ export default function UpgradeScreen() {
   }
 
   return (
-    <Screen scroll>
+    <Screen scroll header={<TopAppBar title="Tutor Buddy Pro" onBack={() => router.back()} />}>
       <View style={{ paddingTop: theme.space[8], gap: theme.space[20] }}>
         <Card variant="premium">
           <View style={{ gap: theme.space[16] }}>
@@ -68,7 +94,7 @@ export default function UpgradeScreen() {
               <View style={{ flex: 1, gap: theme.space[8] }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.space[8] }}>
                   <Ionicons name="star" size={17} color={theme.colors.premium} />
-                  <Text token="micro" color={theme.colors.premiumText}>TUTOR HUNT PRO</Text>
+                  <Text token="micro" color={theme.colors.premiumText}>TUTOR BUDDY PRO</Text>
                 </View>
                 <Text token="h1">More room to grow</Text>
                 <Text token="caption" color={theme.colors.textMuted}>Keep your tutoring work organized without the Free plan limits.</Text>
@@ -92,6 +118,28 @@ export default function UpgradeScreen() {
                 </Text>
               </View>
             </View>
+          </Card>
+        ) : null}
+
+        {expiredPro ? (
+          <Card variant="premium">
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: theme.space[12] }}>
+              <Ionicons name="time-outline" size={24} color={theme.colors.premium} />
+              <View style={{ flex: 1, gap: theme.space[4] }}>
+                <Text token="h3">Your Pro access has expired</Text>
+                <Text token="caption" color={theme.colors.textSecondary}>
+                  Your records are safe and your account is now using the Free plan limits. Choose a plan below to reactivate Pro.
+                </Text>
+              </View>
+            </View>
+          </Card>
+        ) : null}
+
+        {isPro && daysRemaining !== null && daysRemaining <= 7 ? (
+          <Card variant="accent">
+            <Text token="caption" color={theme.colors.warningText}>
+              Your Pro access ends in {Math.max(1, daysRemaining)} day{daysRemaining === 1 ? '' : 's'}. Renew early and the new access will be added after your current expiry.
+            </Text>
           </Card>
         ) : null}
 
@@ -181,7 +229,7 @@ export default function UpgradeScreen() {
               <Ionicons name="chatbubbles-outline" size={22} color={theme.colors.primary} />
               <Text token="h2">Activate Pro</Text>
             </View>
-            <Text token="body">Send the owner your selected plan and the email connected to your Tutor Hunt account.</Text>
+            <Text token="body">Send the owner your selected plan and the email connected to your Tutor Buddy account.</Text>
             <View style={{ padding: theme.space[12], borderRadius: theme.radius.md, backgroundColor: theme.colors.surface }}>
               <Text token="micro" color={theme.colors.textSecondary}>YOUR ACCOUNT EMAIL</Text>
               <Text token="bodyStrong" numberOfLines={1}>{profile?.email ?? 'Sign in to show your account email'}</Text>

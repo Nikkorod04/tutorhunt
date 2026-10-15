@@ -9,6 +9,7 @@
 
 import {
   collection,
+  deleteDoc,
   doc,
   getCountFromServer,
   getDoc,
@@ -27,9 +28,10 @@ import {
 } from 'firebase/firestore';
 import { deleteObject, getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 
+import { isStudentAvatarId } from '@/constants/avatars';
 import { limitsFor } from '@/constants/plans';
 import { getDb, getFileStorage } from './firebase';
-import type { AvatarType, Plan, RateType, Student, StudentStatus } from '@/types';
+import type { Plan, RateType, Student, StudentAvatarId, StudentGender, StudentStatus } from '@/types';
 
 export const STUDENT_PAGE_SIZE = 10;
 
@@ -71,11 +73,27 @@ function toDateOrNull(value: unknown): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
+function normalizeStudentAvatar(value: unknown): StudentAvatarId {
+  if (value === 'boy') return 'male-01';
+  if (value === 'girl') return 'female-01';
+  if (value === 'neutral') return 'default';
+  return isStudentAvatarId(value) ? value : 'default';
+}
+
+function normalizeStudentGender(value: unknown, avatar: StudentAvatarId): StudentGender | null {
+  if (value === 'male' || value === 'female') return value;
+  if (avatar.startsWith('male-')) return 'male';
+  if (avatar.startsWith('female-')) return 'female';
+  return null;
+}
+
 function mapStudent(id: string, data: DocumentData): Student {
+  const avatarType = normalizeStudentAvatar(data.avatarType);
   return {
     id,
     nickname: typeof data.nickname === 'string' ? data.nickname : '',
-    avatarType: (data.avatarType ?? 'neutral') as AvatarType,
+    gender: normalizeStudentGender(data.gender, avatarType),
+    avatarType,
     customAvatarUrl: typeof data.customAvatarUrl === 'string' ? data.customAvatarUrl : null,
     birthday: toDateOrNull(data.birthday),
     school: typeof data.school === 'string' ? data.school : '',
@@ -183,7 +201,8 @@ export async function getStudent(tutorUid: string, studentId: string): Promise<S
 
 export interface StudentInput {
   nickname: string;
-  avatarType: AvatarType;
+  gender: StudentGender;
+  avatarType: StudentAvatarId;
   customAvatarUrl: string | null;
   /** Local picker URI. Uploaded by this service and never written to Firestore. */
   customAvatarLocalUri?: string | null;
@@ -304,16 +323,28 @@ export async function updateStudent(
   return nextUrl;
 }
 
-/**
- * Archives rather than deletes. Student records are never destroyed — sessions,
- * payments and statements reference them, and the blueprint requires that data
- * survive a plan downgrade.
- */
+/** Archive is the normal reversible status change; explicit deletion is separate. */
 export async function archiveStudent(tutorUid: string, studentId: string): Promise<void> {
   await updateDoc(doc(getDb(), 'users', tutorUid, 'students', studentId), {
     status: 'archived' satisfies StudentStatus,
     updatedAt: serverTimestamp(),
   });
+}
+
+/**
+ * Permanently removes only the student profile and its avatar. Financial
+ * records remain intact so historical sessions, expenses and statements are
+ * not silently destroyed with the profile.
+ */
+export async function deleteStudent(tutorUid: string, studentId: string): Promise<void> {
+  const studentRef = doc(getDb(), 'users', tutorUid, 'students', studentId);
+  const current = await getDoc(studentRef);
+  const avatarUrl = current.exists() && typeof current.data().customAvatarUrl === 'string'
+    ? current.data().customAvatarUrl as string
+    : null;
+
+  await deleteDoc(studentRef);
+  await removeAvatar(avatarUrl);
 }
 
 /** Restores an archived student, re-checking the cap because it counts again. */

@@ -22,8 +22,10 @@ import {
 import type {
   Expense,
   ExpenseCategory,
+  Plan,
   ReimbursementStatus,
 } from '@/types';
+import { limitsFor } from '@/constants/plans';
 import { expenseTotal, roundCurrency } from '@/utils/pricing';
 import { getDb } from './firebase';
 
@@ -87,9 +89,10 @@ function mapExpense(id: string, data: DocumentData): Expense {
   };
 }
 
-function persistedInput(input: ExpenseInput, receiptUrl: string | null) {
+function persistedInput(input: ExpenseInput, receiptUrl: string | null, plan: Plan) {
   return {
     ...input,
+    reimbursable: limitsFor(plan).reimbursementTracking && input.reimbursable,
     amountPerOccurrence: roundCurrency(input.amountPerOccurrence),
     receiptUrl,
   };
@@ -138,12 +141,12 @@ export async function getExpense(tutorUid: string, expenseId: string): Promise<E
   return snapshot.exists() ? mapExpense(snapshot.id, snapshot.data()) : null;
 }
 
-export async function createExpense(tutorUid: string, input: ExpenseInput): Promise<string> {
+export async function createExpense(tutorUid: string, plan: Plan, input: ExpenseInput): Promise<string> {
   const expenseRef = doc(expensesCol(tutorUid));
 
   await setDoc(expenseRef, {
     id: expenseRef.id,
-    ...persistedInput(input, null),
+    ...persistedInput(input, null, plan),
     reimbursementStatus: 'not_requested',
     statementId: null,
     createdAt: serverTimestamp(),
@@ -156,6 +159,7 @@ export async function createExpense(tutorUid: string, input: ExpenseInput): Prom
 export async function updateExpense(
   tutorUid: string,
   expenseId: string,
+  plan: Plan,
   input: ExpenseInput,
 ): Promise<string | null> {
   const expenseRef = doc(getDb(), 'users', tutorUid, 'expenses', expenseId);
@@ -163,13 +167,14 @@ export async function updateExpense(
   if (!current.exists()) throw new Error('Expense not found.');
 
   const previousUrl = typeof current.data().receiptUrl === 'string' ? current.data().receiptUrl : null;
+  const reimbursable = limitsFor(plan).reimbursementTracking && input.reimbursable;
 
   await updateDoc(expenseRef, {
-    ...persistedInput(input, previousUrl),
-    reimbursementStatus: input.reimbursable
+    ...persistedInput(input, previousUrl, plan),
+    reimbursementStatus: reimbursable
       ? current.data().reimbursementStatus ?? 'not_requested'
       : 'not_requested',
-    statementId: input.reimbursable ? current.data().statementId ?? null : null,
+    statementId: reimbursable ? current.data().statementId ?? null : null,
     updatedAt: serverTimestamp(),
   });
   return previousUrl;

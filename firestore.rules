@@ -1,6 +1,6 @@
 rules_version = '2';
 
-// Tutor Hunt — Firestore security rules.
+// Tutor Buddy — Firestore security rules.
 // Blueprint section 31.
 //
 // The v1.0 rule set was "users/{uid}: allow read/write if request.auth.uid == uid"
@@ -51,9 +51,86 @@ service cloud.firestore {
       return isSignedIn() && !isSuspended();
     }
 
-    function isTutor() {
-      return isSignedIn()
-        && userDoc(request.auth.uid).role == 'tutor';
+    // -----------------------------------------------------------------------
+    // Notification inbox and preferences.
+    // Notifications are created by trusted backend code; users can read them
+    // and update only their own read state. Preference documents are owned by
+    // the user and are consumed by future notification workers.
+    // -----------------------------------------------------------------------
+
+    match /notifications/{uid}/items/{notificationId} {
+      allow read: if isOwner(uid) || isAdmin();
+
+      allow update: if isOwner(uid)
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.type == resource.data.type
+        && request.resource.data.title == resource.data.title
+        && request.resource.data.body == resource.data.body
+        && request.resource.data.route == resource.data.route
+        && request.resource.data.data == resource.data.data
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.readAt is timestamp;
+
+      allow create, delete: if isAdmin();
+    }
+
+    match /notificationPreferences/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+
+      allow create, update: if isOwner(uid)
+        && canWrite()
+        && request.resource.data.uid == uid
+        && request.resource.data.sessionReminders is bool
+        && request.resource.data.proUpdates is bool
+        && request.resource.data.productUpdates is bool;
+
+      allow delete: if isAdmin();
+    }
+
+    match /notificationDevices/{uid}/items/{deviceId} {
+      allow read: if isAdmin();
+
+      allow create, update: if isOwner(uid)
+        && canWrite()
+        && request.resource.data.uid == uid
+        && request.resource.data.token is string
+        && request.resource.data.token.size() > 0
+        && request.resource.data.token.size() <= 4096
+        && request.resource.data.tokenType in ['native', 'expo']
+        && request.resource.data.platform in ['android', 'ios'];
+
+      allow delete: if isAdmin() || isOwner(uid);
+    }
+
+    // Global admin announcements remain visible until an administrator deletes
+    // them. Read state is private to each tutor so one announcement is not
+    // copied into every user's notification inbox.
+    match /announcements/{announcementId} {
+      allow read: if isSignedIn();
+
+      allow create: if isAdmin()
+        && request.resource.data.createdByUid == request.auth.uid
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 120
+        && request.resource.data.message is string
+        && request.resource.data.message.size() > 0
+        && request.resource.data.message.size() <= 4000;
+
+      allow delete: if isAdmin();
+      allow update: if false;
+    }
+
+    match /announcementReads/{uid}/items/{announcementId} {
+      allow read: if isOwner(uid) || isAdmin();
+
+      allow create, update: if isOwner(uid)
+        && canWrite()
+        && request.resource.data.uid == uid
+        && request.resource.data.announcementId == announcementId
+        && request.resource.data.readAt is timestamp;
+
+      allow delete: if isOwner(uid) || isAdmin();
     }
 
     // -----------------------------------------------------------------------
@@ -65,12 +142,15 @@ service cloud.firestore {
 
       allow create: if isOwner(uid)
         && request.resource.data.uid == uid
-        && request.resource.data.role in ['tutor', 'parent', 'admin']
+        && request.resource.data.role in ['tutor', 'admin']
         && request.resource.data.accountStatus == 'active';
 
       // role and accountStatus are immutable from the client. Only an admin
       // may change them (that is how suspension is applied and lifted).
-      allow update: if isAdmin() || (
+      allow update: if (isAdmin()
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.accountStatus in ['active', 'suspended']) || (
         isOwner(uid)
         && canWrite()
         && request.resource.data.uid == resource.data.uid
@@ -82,9 +162,40 @@ service cloud.firestore {
       // Storage objects are removed too (blueprint sections 33 and 43).
       allow delete: if isAdmin();
 
-      // Private subtree: students, sessions, expenses, payments,
-      // progressNotes, statements, recurringSeries and favorites.
-      match /{sub=**} {
+      // Explicit private collections only. Do not use a recursive wildcard
+      // here: it would reopen retired user-owned collections such as
+      // users/{uid}/favorites.
+      match /students/{studentId} {
+        allow read: if isOwner(uid) || isAdmin();
+        allow write: if isOwner(uid) && canWrite();
+      }
+
+      match /sessions/{sessionId} {
+        allow read: if isOwner(uid) || isAdmin();
+        allow write: if isOwner(uid) && canWrite();
+      }
+
+      match /expenses/{expenseId} {
+        allow read: if isOwner(uid) || isAdmin();
+        allow write: if isOwner(uid) && canWrite();
+      }
+
+      match /payments/{paymentId} {
+        allow read: if isOwner(uid) || isAdmin();
+        allow write: if isOwner(uid) && canWrite();
+      }
+
+      match /statements/{statementId} {
+        allow read: if isOwner(uid) || isAdmin();
+        allow write: if isOwner(uid) && canWrite();
+      }
+
+      match /recurringSeries/{seriesId} {
+        allow read: if isOwner(uid) || isAdmin();
+        allow write: if isOwner(uid) && canWrite();
+      }
+
+      match /progressNotes/{noteId} {
         allow read: if isOwner(uid) || isAdmin();
         allow write: if isOwner(uid) && canWrite();
       }
@@ -135,113 +246,34 @@ service cloud.firestore {
     }
 
     // -----------------------------------------------------------------------
-    // tutorProfiles/{uid} — public listing data.
-    //
-    // rating, reviewCount, identityVerified and credentialsVerified are pinned
-    // so a tutor can never award itself a verification badge or fabricate a
-    // rating. Only an admin or a trusted backend sets them.
+    // verificationRequests/{requestId} — a private tutor submission reviewed
+    // by an administrator. The app currently has no public verification badge.
+    // This shape is reserved for the future verification workflow.
     // -----------------------------------------------------------------------
 
-    match /tutorProfiles/{uid} {
-      allow read: if isSignedIn();
-
-      allow create: if isOwner(uid)
-        && canWrite()
-        && request.resource.data.uid == uid
-        && trustFieldsDefault();
-
-      allow update: if isAdmin() || (
-        isOwner(uid)
-        && canWrite()
-        && request.resource.data.uid == resource.data.uid
-        && request.resource.data.rating == resource.data.get('rating', 0)
-        && request.resource.data.reviewCount == resource.data.get('reviewCount', 0)
-        && request.resource.data.identityVerified == resource.data.get('identityVerified', false)
-        && request.resource.data.credentialsVerified == resource.data.get('credentialsVerified', false)
-      );
-
-      allow delete: if isAdmin() || (isOwner(uid) && canWrite());
-    }
-
-    function trustFieldsDefault() {
-      return (!('rating' in request.resource.data) || request.resource.data.rating == 0)
-        && (!('reviewCount' in request.resource.data) || request.resource.data.reviewCount == 0)
-        && (!('identityVerified' in request.resource.data) || request.resource.data.identityVerified == false)
-        && (!('credentialsVerified' in request.resource.data) || request.resource.data.credentialsVerified == false);
-    }
-
-    // -----------------------------------------------------------------------
-    // parentProfiles/{uid}
-    //
-    // v1.0 never defined who could read this, which left a parent's contact
-    // details either exposed to every signed-in tutor or unreachable. Another
-    // user may now read it only when the parent opted in.
-    // -----------------------------------------------------------------------
-
-    match /parentProfiles/{uid} {
-      allow read: if isOwner(uid) || isAdmin()
-        || (isSignedIn() && resource.data.get('contactVisible', false) == true);
-
-      allow create, update: if isOwner(uid)
-        && canWrite()
-        && request.resource.data.uid == uid;
-
-      allow delete: if isAdmin() || (isOwner(uid) && canWrite());
-    }
-
-    // -----------------------------------------------------------------------
-    // parentPosts/{postId}
-    // -----------------------------------------------------------------------
-
-    match /parentPosts/{postId} {
-      allow read: if isSignedIn();
-
+    match /verificationRequests/{requestId} {
       allow create: if canWrite()
-        && request.resource.data.parentUid == request.auth.uid;
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.requestType in ['identity', 'credentials'];
 
-      allow update, delete: if isAdmin() || (
-        canWrite() && resource.data.parentUid == request.auth.uid
+      allow read: if isAdmin() || (
+        isSignedIn() && resource.data.uid == request.auth.uid
       );
 
-      // Tutors can express interest without receiving write access to the
-      // parent's request. The parent can read the interest records for their
-      // own post, while the tutor can read and update their own record.
-      match /interests/{tutorUid} {
-        allow read: if isAdmin()
-          || isOwner(tutorUid)
-          || (isSignedIn() && get(/databases/$(database)/documents/parentPosts/$(postId)).data.parentUid == request.auth.uid);
-
-        allow create: if isTutor()
-          && canWrite()
-          && isOwner(tutorUid)
-          && get(/databases/$(database)/documents/parentPosts/$(postId)).data.status == 'open'
-          && request.resource.data.tutorUid == request.auth.uid
-          && request.resource.data.parentUid == get(/databases/$(database)/documents/parentPosts/$(postId)).data.parentUid
-          && request.resource.data.status == 'active'
-          && request.resource.data.message is string
-          && request.resource.data.message.size() <= 500;
-
-        allow update: if isTutor()
-          && canWrite()
-          && isOwner(tutorUid)
-          && resource.data.tutorUid == request.auth.uid
-          && request.resource.data.tutorUid == resource.data.tutorUid
-          && request.resource.data.parentUid == resource.data.parentUid
-          && request.resource.data.status in ['active', 'withdrawn']
-          && request.resource.data.message is string
-          && request.resource.data.message.size() <= 500;
-
-        allow delete: if isAdmin() || (isTutor() && canWrite() && isOwner(tutorUid));
-      }
+      allow update, delete: if isAdmin();
     }
 
-    // -----------------------------------------------------------------------
-    // reports/{reportId}
+    // reports/{reportId} — reserved for account/record safety reports. The
+    // retired marketplace report targets are deliberately not accepted.
     // -----------------------------------------------------------------------
 
     match /reports/{reportId} {
       allow create: if canWrite()
         && request.resource.data.reporterUid == request.auth.uid
+        && request.resource.data.targetType in ['account', 'record']
+        && request.resource.data.targetId is string
+        && request.resource.data.reason is string
         && request.resource.data.status == 'pending';
 
       allow read, update, delete: if isAdmin();

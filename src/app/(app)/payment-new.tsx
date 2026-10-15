@@ -2,13 +2,14 @@ import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import { View } from 'react-native';
 
-import { Card, EmptyState, Screen, Text, useToast } from '@/components/ui';
-import { FormHeader } from '@/components/FormHeader';
+import { Card, EmptyState, Screen, Text, TopAppBar, useToast } from '@/components/ui';
 import { PaymentForm } from '@/components/PaymentForm';
+import { useSubmitGuard } from '@/hooks/useSubmitGuard';
 import { createPayment, paymentErrorMessage, type PaymentInput } from '@/services/payments.service';
 import { listStudents } from '@/services/students.service';
 import { useAuthStore } from '@/stores/authStore';
 import { useTheme } from '@/theme';
+import { showToastAfterNavigation } from '@/utils/feedback';
 import type { Student } from '@/types';
 
 export default function PaymentNewScreen() {
@@ -17,6 +18,7 @@ export default function PaymentNewScreen() {
   const preferredStudentId = Array.isArray(params.studentId) ? params.studentId[0] : params.studentId;
   const profile = useAuthStore((state) => state.profile);
   const { showToast } = useToast();
+  const { beginSubmit, endSubmit } = useSubmitGuard();
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -38,28 +40,32 @@ export default function PaymentNewScreen() {
   useEffect(() => { void loadStudents(); }, [loadStudents]);
 
   async function handleSubmit(input: PaymentInput) {
-    if (!profile) return;
+    if (!profile || !beginSubmit()) return;
     setBusy(true);
     setError(null);
+    let savedId: string | null = null;
+    let leavingScreen = false;
     try {
-      const id = await createPayment(profile.uid, input);
-      showToast('Payment recorded successfully');
-      router.replace({ pathname: '/payment-detail', params: { id } } as never);
+      savedId = await createPayment(profile.uid, input);
+      leavingScreen = Boolean(savedId);
     } catch (caught) {
       const message = paymentErrorMessage(caught);
       setError(message);
       showToast(message, 'danger');
+      return;
     } finally {
-      setBusy(false);
+      endSubmit();
+      if (!leavingScreen) setBusy(false);
     }
+
+    if (!savedId) return;
+    router.replace({ pathname: '/payment-detail', params: { id: savedId } } as never);
+    showToastAfterNavigation(showToast, 'Payment recorded successfully');
   }
 
   return (
-    <Screen scroll>
+    <Screen scroll header={<TopAppBar title="Record payment" onBack={() => router.back()} />}>
       <View style={{ paddingTop: theme.space[8], gap: theme.space[16] }}>
-        <View style={{ gap: theme.space[4] }}>
-          <FormHeader eyebrow="PAYMENT LEDGER" title="Record payment" description="Record money received against a student so balances stay accurate." icon="card-outline" />
-        </View>
         {error ? <Card variant="flat"><Text token="caption" color={theme.colors.dangerText}>{error}</Text></Card> : null}
         {!loading && students.length === 0 ? (
           <Card variant="flat">

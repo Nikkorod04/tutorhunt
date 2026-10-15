@@ -11,18 +11,21 @@ import {
   Screen,
   Skeleton,
   Text,
+  TopAppBar,
   useToast,
 } from '@/components/ui';
 import { RecordDetailHeader, RecordDetailMetrics, RecordDetailRow, RecordDetailSection } from '@/components/RecordDetail';
 import { expenseCategoryLabel } from '@/constants/expenses';
 import { deleteExpense, expenseErrorMessage, getExpense, updateReimbursementStatus } from '@/services/expenses.service';
 import { getStudent } from '@/services/students.service';
+import { useSubmitGuard } from '@/hooks/useSubmitGuard';
 import { useAuthStore } from '@/stores/authStore';
 import { useTheme } from '@/theme';
 import type { Expense, Student } from '@/types';
 import { expenseTotal } from '@/utils/pricing';
 import { formatPeso, formatPesoCompact } from '@/utils/currency';
 import { formatDisplayDate } from '@/utils/date';
+import { showToastAfterNavigation } from '@/utils/feedback';
 
 export default function ExpenseDetailScreen() {
   const theme = useTheme();
@@ -30,6 +33,7 @@ export default function ExpenseDetailScreen() {
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const profile = useAuthStore((state) => state.profile);
   const { showToast } = useToast();
+  const { beginSubmit, endSubmit } = useSubmitGuard();
   const [expense, setExpense] = useState<Expense | null>(null);
   const [student, setStudent] = useState<Student | null>(null);
   const [loading, setLoading] = useState(true);
@@ -53,15 +57,20 @@ export default function ExpenseDetailScreen() {
     Alert.alert('Delete this expense?', 'This permanently removes the expense record.', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
+        if (!beginSubmit()) return;
         setBusy(true);
-        try { await deleteExpense(profile.uid, id); showToast('Expense deleted'); router.replace('/expenses' as never); }
-        catch (caught) { const message = expenseErrorMessage(caught); setError(message); showToast(message, 'danger'); setBusy(false); }
+        let leavingScreen = false;
+        try { await deleteExpense(profile.uid, id); leavingScreen = true; }
+        catch (caught) { const message = expenseErrorMessage(caught); setError(message); showToast(message, 'danger'); return; }
+        finally { endSubmit(); if (!leavingScreen) setBusy(false); }
+        router.replace('/expenses' as never);
+        showToastAfterNavigation(showToast, 'Expense deleted');
       } },
     ]);
   }
 
   async function markPaid() {
-    if (!profile || !id || !expense) return;
+    if (!profile || !id || !expense || !beginSubmit()) return;
     setBusy(true);
     setError(null);
     try {
@@ -69,7 +78,7 @@ export default function ExpenseDetailScreen() {
       setExpense({ ...expense, reimbursementStatus: 'paid', updatedAt: new Date() });
       showToast('Expense marked as reimbursed');
     } catch (caught) { const message = expenseErrorMessage(caught); setError(message); showToast(message, 'danger'); }
-    finally { setBusy(false); }
+    finally { endSubmit(); setBusy(false); }
   }
 
   if (loading) {
@@ -95,9 +104,8 @@ export default function ExpenseDetailScreen() {
   }
 
   const total = expenseTotal(expense);
-
   return (
-    <Screen scroll>
+    <Screen scroll header={<TopAppBar title="Expense info" onBack={() => router.back()} />}>
       <View style={{ paddingTop: theme.space[8], gap: theme.space[20] }}>
         <RecordDetailHeader
           eyebrow="EXPENSE RECORD"
@@ -106,6 +114,7 @@ export default function ExpenseDetailScreen() {
           icon="receipt-outline"
           status={<ReimbursementStatusChip status={expense.reimbursementStatus} />}
           onBack={() => router.back()}
+          showToolbar={false}
         />
 
         {error ? <Card variant="accent"><Text token="caption" color={theme.colors.warningText}>{error}</Text></Card> : null}

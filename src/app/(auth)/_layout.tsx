@@ -18,6 +18,7 @@ export default function AuthLayout() {
 
   if (status === 'loading') return <AppLoading />;
   if (status === 'unconfigured') return <Redirect href="/setup" />;
+  if (status === 'needsProfile') return <Redirect href={'/tutor-onboarding' as never} />;
   if (status === 'signedIn') return <Redirect href="/" />;
 
   return (

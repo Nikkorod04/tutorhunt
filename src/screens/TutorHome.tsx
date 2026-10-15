@@ -12,7 +12,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Image, View } from 'react-native';
+import { Image, Pressable, View } from 'react-native';
 
 import {
   Avatar,
@@ -26,36 +26,24 @@ import {
   SectionHeader,
   StatTile,
   Text,
+  TopAppBar,
+  useToast,
 } from '@/components/ui';
-import type { IconName } from '@/components/ui';
-import { RecordListCard } from '@/components/RecordList';
+import { NotificationBell } from '@/components/NotificationBell';
 import { activePlanFor, limitsFor } from '@/constants/plans';
 import { ILLUSTRATIONS } from '@/constants/illustrations';
 import { getEarningsSnapshot, type EarningsSnapshot } from '@/services/earnings.service';
-import { listSessions } from '@/services/sessions.service';
+import { listSessions, sessionErrorMessage, updateSessionStatus } from '@/services/sessions.service';
 import { countActiveStudents, listStudents } from '@/services/students.service';
 import { useAuthStore } from '@/stores/authStore';
 import { useTheme } from '@/theme';
 import type { Session, Student } from '@/types';
 import { formatDisplayTime, formatIsoDate } from '@/utils/date';
-
-interface QuickAction {
-  icon: IconName;
-  label: string;
-  route: string;
-}
-
-const QUICK_ACTIONS: QuickAction[] = [
-  { icon: 'person-add-outline', label: 'Add student', route: '/students' },
-  { icon: 'add-circle-outline', label: 'Add session', route: '/sessions' },
-  { icon: 'wallet-outline', label: 'Add expense', route: '/expense-new' },
-  { icon: 'document-text-outline', label: 'Generate statement', route: '/statement-new' },
-  { icon: 'repeat-outline', label: 'Recurring sessions', route: '/recurring' },
-  { icon: 'search-outline', label: 'Tutor Hunt', route: '/parent-requests' },
-];
+import { formatSessionTimingHeading, getSessionTiming, sessionDisplayPriority } from '@/utils/session-presentation';
 
 export function TutorHome() {
   const theme = useTheme();
+  const { showToast } = useToast();
   const profile = useAuthStore((state) => state.profile);
   const entitlement = useAuthStore((state) => state.entitlement);
   const activePlan = activePlanFor(entitlement);
@@ -63,7 +51,9 @@ export function TutorHome() {
   const [activeStudentCount, setActiveStudentCount] = useState(0);
   const [snapshot, setSnapshot] = useState<EarningsSnapshot | null>(null);
   const [todaySessions, setTodaySessions] = useState<Session[]>([]);
-  const [studentNames, setStudentNames] = useState<Record<string, string>>({});
+  const [studentsById, setStudentsById] = useState<Record<string, Student>>({});
+  const [now, setNow] = useState(() => new Date());
+  const [busySessionId, setBusySessionId] = useState<string | null>(null);
 
   const loadFinancials = useCallback(async () => {
     if (!profile || profile.role !== 'tutor') return;
@@ -76,11 +66,22 @@ export function TutorHome() {
       const nextSnapshot = await getEarningsSnapshot(profile.uid, new Date(), studentsPage.items);
       setActiveStudentCount(activeCount);
       setSnapshot(nextSnapshot);
-      const names: Record<string, string> = {};
-      studentsPage.items.forEach((student: Student) => { names[student.id] = student.nickname; });
-      setStudentNames(names);
-      const today = formatIsoDate(new Date());
-      setTodaySessions(sessionsPage.items.filter((session) => formatIsoDate(session.startsAt) === today).slice(0, 3));
+      const nextStudents: Record<string, Student> = {};
+      studentsPage.items.forEach((student: Student) => { nextStudents[student.id] = student; });
+      setStudentsById(nextStudents);
+      const loadedNow = new Date();
+      const today = formatIsoDate(loadedNow);
+      setTodaySessions(
+        sessionsPage.items
+          .filter((session) => formatIsoDate(session.startsAt) === today)
+          .sort((left, right) => {
+            const priorityDifference = sessionDisplayPriority(left, loadedNow) - sessionDisplayPriority(right, loadedNow);
+            return priorityDifference !== 0
+              ? priorityDifference
+              : left.startsAt.getTime() - right.startsAt.getTime();
+          })
+          .slice(0, 5),
+      );
     } catch {
       // The rest of the dashboard remains useful when financial data is
       // temporarily unavailable; the full Earnings screen exposes errors.
@@ -89,11 +90,36 @@ export function TutorHome() {
 
   useEffect(() => { void loadFinancials(); }, [loadFinancials]);
 
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(timer);
+  }, []);
+
+  async function markSessionCompleted(session: Session) {
+    if (!profile || busySessionId) return;
+    setBusySessionId(session.id);
+    try {
+      await updateSessionStatus(profile.uid, session.id, 'completed');
+      setTodaySessions((current) => current.map((item) => item.id === session.id ? { ...item, status: 'completed', billable: true } : item));
+      showToast('Session marked completed', 'success');
+    } catch (caught) {
+      showToast(sessionErrorMessage(caught), 'danger');
+    } finally {
+      setBusySessionId(null);
+    }
+  }
+
   const firstName = (profile?.displayName ?? 'there').split(' ')[0];
   const pdfsUsed = entitlement?.pdfStatementsThisMonth ?? 0;
+  const orderedTodaySessions = [...todaySessions].sort((left, right) => {
+    const priorityDifference = sessionDisplayPriority(left, now) - sessionDisplayPriority(right, now);
+    return priorityDifference !== 0
+      ? priorityDifference
+      : left.startsAt.getTime() - right.startsAt.getTime();
+  });
 
   return (
-    <Screen scroll padded>
+    <Screen scroll padded header={<TopAppBar title="Home" action={<NotificationBell />} />}>
       <View style={{ paddingTop: theme.space[8], gap: theme.space[24] }}>
         {/* Greeting */}
         <View
@@ -156,33 +182,6 @@ export function TutorHome() {
           </View>
         </Card>
 
-        {/* Quick actions */}
-        <View>
-          <SectionHeader title="Record activity" />
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.space[12] }}>
-            {QUICK_ACTIONS.slice(0, 2).map((action) => (
-              <Card key={action.label} variant="interactive" onPress={() => router.push(action.route as never)} accessibilityLabel={action.label} style={{ flexBasis: '47%', flexGrow: 1 }}>
-                <View style={{ gap: theme.space[8] }}>
-                  <View style={{ width: 40, height: 40, borderRadius: theme.radius.md, backgroundColor: theme.colors.primarySubtle, alignItems: 'center', justifyContent: 'center' }}>
-                    <Ionicons name={action.icon} size={20} color={theme.colors.primary} />
-                  </View>
-                  <Text token="bodyStrong">{action.label}</Text>
-                </View>
-              </Card>
-            ))}
-          </View>
-          <View style={{ marginTop: theme.space[12], flexDirection: 'row', flexWrap: 'wrap', gap: theme.space[12] }}>
-            {QUICK_ACTIONS.slice(2).map((action) => (
-              <Card key={action.label} variant="interactive" onPress={() => router.push(action.route as never)} accessibilityLabel={action.label} style={{ flexBasis: '30%', flexGrow: 1 }}>
-                <View style={{ gap: theme.space[8] }}>
-                  <Ionicons name={action.icon} size={20} color={theme.colors.primary} />
-                  <Text token="caption">{action.label}</Text>
-                </View>
-              </Card>
-            ))}
-          </View>
-        </View>
-
         {/* Today's sessions */}
         <View>
           <SectionHeader title="Today's sessions" action={<Button label="View all" variant="ghost" size="sm" onPress={() => router.push('/sessions' as never)} />} />
@@ -192,16 +191,14 @@ export function TutorHome() {
             </Card>
           ) : (
             <View style={{ gap: theme.space[12] }}>
-              {todaySessions.map((session) => (
-                <RecordListCard
+              {orderedTodaySessions.map((session) => (
+                <TodaySessionCard
                   key={session.id}
-                  icon="calendar-outline"
-                  iconTone={session.status === 'completed' ? 'success' : 'info'}
-                  title={session.subject}
-                  subtitle={`${formatDisplayTime(session.startsAt)} · ${studentNames[session.studentId] ?? 'Student'}`}
-                  amount={`₱${session.sessionFee.toFixed(2)}`}
-                  status={<SessionStatusChip status={session.status} />}
-                  actionLabel="View session"
+                  session={session}
+                  student={studentsById[session.studentId]}
+                  now={now}
+                  busy={busySessionId === session.id}
+                  onMarkCompleted={() => void markSessionCompleted(session)}
                   onPress={() => router.push({ pathname: '/session-detail', params: { id: session.id } } as never)}
                 />
               ))}
@@ -235,5 +232,68 @@ export function TutorHome() {
         </Text>
       </View>
     </Screen>
+  );
+}
+
+function TodaySessionCard({
+  session,
+  student,
+  now,
+  busy,
+  onMarkCompleted,
+  onPress,
+}: {
+  session: Session;
+  student?: Student;
+  now: Date;
+  busy: boolean;
+  onMarkCompleted: () => void;
+  onPress: () => void;
+}) {
+  const theme = useTheme();
+  const timing = getSessionTiming(session, now);
+  const isOverdue = timing.kind === 'overdue';
+  const isOngoing = timing.kind === 'ongoing';
+  const timingColor = isOverdue ? theme.colors.dangerText : isOngoing ? theme.colors.successText : theme.colors.primary;
+
+  return (
+    <Card
+      variant="raised"
+      style={isOverdue ? { backgroundColor: theme.colors.dangerSubtle, borderColor: theme.colors.dangerBorder } : undefined}
+    >
+      <View style={{ gap: theme.space[12] }}>
+        <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={`View ${student?.nickname ?? 'student'} session`}>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: theme.space[8] }}>
+            <View style={{ flex: 1, gap: theme.space[2] }}>
+              <Text token="h3" color={timingColor}>{formatSessionTimingHeading(timing, student?.tutoringPlace)}</Text>
+              {isOverdue ? <Text token="caption" color={theme.colors.dangerText}>Mark it completed or reschedule to keep your records up to date.</Text> : null}
+            </View>
+            <SessionStatusChip status={session.status} />
+          </View>
+
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.space[12], marginTop: theme.space[12] }}>
+            <Avatar
+              name={student?.nickname ?? 'Student'}
+              imageUrl={student?.avatarType === 'custom' ? student.customAvatarUrl : null}
+              builtin={student?.avatarType === 'custom' ? 'default' : student?.avatarType}
+              size="sm"
+            />
+            <View style={{ flex: 1, gap: theme.space[2] }}>
+              <Text token="h3" numberOfLines={1}>{student?.nickname ?? 'Student'}</Text>
+              <Text token="caption" color={theme.colors.textMuted}>{formatDisplayTime(session.startsAt)} – {formatDisplayTime(session.endsAt)}</Text>
+              <Text token="caption" color={theme.colors.textSecondary} numberOfLines={1}>{session.subject}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={theme.colors.textHint} />
+          </View>
+        </Pressable>
+
+        {isOverdue ? (
+          <View style={{ flexDirection: 'row', gap: theme.space[8] }}>
+            <View style={{ flex: 1 }}><Button label="Mark completed" size="sm" loading={busy} onPress={onMarkCompleted} fullWidth /></View>
+            <View style={{ flex: 1 }}><Button label="Reschedule" size="sm" variant="secondary" disabled={busy} onPress={() => router.push({ pathname: '/session-new', params: { rescheduleFrom: session.id, studentId: session.studentId } } as never)} fullWidth /></View>
+          </View>
+        ) : null}
+      </View>
+    </Card>
   );
 }

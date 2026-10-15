@@ -1,15 +1,15 @@
 /**
- * Student details.
+ * Student information and quick actions.
  *
- * Loads by route id so a deep link works. Archive and restore both go through
- * the service, and restore re-checks the plan cap because an archived student
- * counts again once it is active.
+ * The screen follows the native Android-style student mockup: a compact app
+ * bar, profile hero, contact/tutoring/notes cards, and a single overflow menu
+ * for the record actions.
  */
 
 import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, View } from 'react-native';
+import { Alert, Linking, Pressable, View } from 'react-native';
 
 import {
   Avatar,
@@ -17,23 +17,36 @@ import {
   Card,
   Chip,
   EmptyState,
+  IconButton,
   ListRow,
   Screen,
   SessionStatusChip,
   Skeleton,
   Text,
+  TopAppBar,
   useToast,
+  type IconName,
 } from '@/components/ui';
-import { RecordDetailHeader, RecordDetailMetrics, RecordDetailRow, RecordDetailSection } from '@/components/RecordDetail';
 import { activePlanFor } from '@/constants/plans';
-import { archiveStudent, getStudent, restoreStudent, setStudentInactive, studentErrorMessage, StudentLimitError } from '@/services/students.service';
+import { useSubmitGuard } from '@/hooks/useSubmitGuard';
+import {
+  archiveStudent,
+  deleteStudent,
+  getStudent,
+  restoreStudent,
+  setStudentInactive,
+  studentErrorMessage,
+  StudentLimitError,
+} from '@/services/students.service';
 import { listSessions } from '@/services/sessions.service';
 import { useAuthStore } from '@/stores/authStore';
 import { useStudentStore } from '@/stores/studentStore';
 import { useTheme, type Tone } from '@/theme';
 import type { Session, Student, StudentStatus } from '@/types';
-import { ageFromBirthday, formatDisplayDate, formatDisplayDateTime } from '@/utils/date';
+import { ageFromBirthday, formatDisplayDate, formatDisplayDateTime, formatDisplayTime } from '@/utils/date';
 import { formatPeso, formatPesoCompact } from '@/utils/currency';
+import { runAfterNavigation, showToastAfterNavigation } from '@/utils/feedback';
+import { compareSessionsForDisplay, formatSessionTimingHeading, getSessionTiming } from '@/utils/session-presentation';
 
 const STATUS_TONE: Record<StudentStatus, Tone> = {
   active: 'success',
@@ -47,18 +60,90 @@ const STATUS_LABEL: Record<StudentStatus, string> = {
   archived: 'Archived',
 };
 
+type ClipboardModule = {
+  setStringAsync: (value: string) => Promise<void>;
+};
+
+// Older development/production binaries may not contain ExpoClipboard yet.
+let clipboard: ClipboardModule | null = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  clipboard = require('expo-clipboard') as ClipboardModule;
+} catch {
+  clipboard = null;
+}
+
+function InfoCard({ icon, title, children }: { icon: IconName; title: string; children: React.ReactNode }) {
+  const theme = useTheme();
+
+  return (
+    <Card variant="raised">
+      <View style={{ gap: theme.space[12] }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.space[8] }}>
+          <View
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 16,
+              backgroundColor: theme.colors.primarySubtle,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Ionicons name={icon} size={18} color={theme.colors.primary} />
+          </View>
+          <Text token="h3">{title}</Text>
+        </View>
+        {children}
+      </View>
+    </Card>
+  );
+}
+
+function DetailLine({ label, value }: { label: string; value: string }) {
+  const theme = useTheme();
+
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.space[12] }}>
+      <Text token="caption" color={theme.colors.textMuted} style={{ flex: 1 }}>
+        {label}
+      </Text>
+      <Text token="bodyStrong" align="right" style={{ flex: 1 }}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+function avatarProps(student: Student) {
+  return {
+    builtin: student.avatarType === 'custom' ? undefined : student.avatarType,
+    imageUrl: student.avatarType === 'custom' ? student.customAvatarUrl : null,
+    name: student.nickname,
+  } as const;
+}
+
+function typicalSchedule(session: Session | undefined): string {
+  if (!session) return 'Not set';
+  return `${formatDisplayTime(session.startsAt)} – ${formatDisplayTime(session.endsAt)}`;
+}
+
 export default function StudentDetailScreen() {
   const theme = useTheme();
   const { id } = useLocalSearchParams<{ id?: string }>();
   const profile = useAuthStore((state) => state.profile);
   const entitlement = useAuthStore((state) => state.entitlement);
   const upsert = useStudentStore((state) => state.upsert);
+  const remove = useStudentStore((state) => state.remove);
   const { showToast } = useToast();
+  const { beginSubmit, endSubmit } = useSubmitGuard();
 
   const [student, setStudent] = useState<Student | null>(null);
   const [recentSessions, setRecentSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const [now, setNow] = useState(() => new Date());
 
   const load = useCallback(async () => {
     if (!profile || !id) {
@@ -71,7 +156,7 @@ export default function StudentDetailScreen() {
         listSessions(profile.uid, { studentId: id, pageSize: 3 }),
       ]);
       setStudent(found);
-      setRecentSessions(sessions.items);
+        setRecentSessions([...sessions.items].sort((left, right) => compareSessionsForDisplay(left, right)).slice(0, 3));
     } catch {
       setStudent(null);
     } finally {
@@ -79,10 +164,19 @@ export default function StudentDetailScreen() {
     }
   }, [profile, id]);
 
-  useEffect(() => { void load(); }, [load]);
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load]),
+  );
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(timer);
+  }, []);
 
   async function mutate(action: 'archive' | 'restore' | 'inactive') {
-    if (!profile || !id || !student) return;
+    if (!profile || !id || !student || !beginSubmit()) return;
 
     setBusy(true);
     try {
@@ -99,6 +193,7 @@ export default function StudentDetailScreen() {
       const message = studentErrorMessage(caught);
       showToast(message, caught instanceof StudentLimitError ? 'warning' : 'danger');
     } finally {
+      endSubmit();
       setBusy(false);
     }
   }
@@ -114,10 +209,59 @@ export default function StudentDetailScreen() {
     );
   }
 
+  function confirmPermanentDelete() {
+    Alert.alert(
+      'Delete student permanently?',
+      'The student profile and avatar will be deleted forever. Existing sessions, expenses, payments and statements will be kept as historical records.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete permanently', style: 'destructive', onPress: () => void deletePermanently() },
+      ],
+    );
+  }
+
+  async function deletePermanently() {
+    if (!profile || !id || !student || !beginSubmit()) return;
+    setBusy(true);
+    let leavingScreen = false;
+    try {
+      await deleteStudent(profile.uid, id);
+      leavingScreen = true;
+      router.back();
+      runAfterNavigation(() => remove(id));
+      showToastAfterNavigation(showToast, 'Student deleted permanently');
+    } catch (caught) {
+      showToast(studentErrorMessage(caught), 'danger');
+    } finally {
+      endSubmit();
+      if (!leavingScreen) setBusy(false);
+    }
+  }
+
+  async function copyParentContact() {
+    if (!student?.parentContact.trim()) return;
+    if (!clipboard) {
+      showToast('Copy is unavailable in this app build. Rebuild the app to enable it.', 'warning');
+      return;
+    }
+    await clipboard.setStringAsync(student.parentContact.trim());
+    showToast('Parent contact copied');
+  }
+
+  async function callParent() {
+    if (!student?.parentContact.trim()) return;
+    const phone = student.parentContact.trim().replace(/[\s()-]/g, '');
+    try {
+      await Linking.openURL(`tel:${phone}`);
+    } catch {
+      showToast('Could not open the phone app', 'danger');
+    }
+  }
+
   if (loading) {
     return (
       <Screen scroll>
-        <View style={{ paddingTop: theme.space[8], gap: theme.space[16] }}>
+        <View style={{ paddingTop: theme.space[16], gap: theme.space[16] }}>
           <Skeleton width="32%" />
           <Skeleton variant="card" height={144} />
           <Skeleton variant="card" height={116} />
@@ -137,54 +281,143 @@ export default function StudentDetailScreen() {
     );
   }
 
+  const latestSession = recentSessions[0];
+  const avatar = avatarProps(student);
+
   return (
-    <Screen scroll>
-      <View style={{ paddingTop: theme.space[8], gap: theme.space[20] }}>
-        <RecordDetailHeader
-          eyebrow="STUDENT PROFILE"
-          title={student.nickname}
-          subtitle={`${student.gradeLevel || 'Grade level not set'}${student.school ? ` · ${student.school}` : ''}`}
-          leading={
-            <Avatar
-              builtin={student.avatarType === 'custom' ? undefined : student.avatarType}
-              imageUrl={student.avatarType === 'custom' ? student.customAvatarUrl : null}
-              name={student.nickname}
-              size="lg"
-            />
-          }
-          status={<Chip variant="status" tone={STATUS_TONE[student.status]} label={STATUS_LABEL[student.status]} />}
+    <Screen
+      scroll
+      header={(
+        <TopAppBar
+          title="Student info"
           onBack={() => router.back()}
+          action={(
+            <IconButton
+              icon={actionsOpen ? 'close-outline' : 'ellipsis-vertical'}
+              accessibilityLabel={actionsOpen ? 'Close student actions' : 'Open student actions'}
+              onPress={() => setActionsOpen((open) => !open)}
+              color={theme.colors.textOnPrimary}
+              pressedBackgroundColor={theme.colors.primaryPressed}
+            />
+          )}
         />
+      )}
+    >
+      <View style={{ paddingTop: theme.space[8], gap: theme.space[16], position: 'relative', overflow: 'visible' }}>
 
-        <RecordDetailMetrics
-          metrics={[
-            { label: 'AGE', value: student.birthday ? `${ageFromBirthday(student.birthday)}` : '—' },
-            { label: 'DEFAULT RATE', value: formatPeso(student.defaultRate) },
-          ]}
-        />
-        <Text token="caption" color={theme.colors.textMuted} style={{ marginTop: -theme.space[12] }}>
-          {student.rateType === 'hourly' ? 'Charged per hour' : 'Charged per session'}
-          {student.birthday ? ` · Born ${formatDisplayDate(student.birthday)}` : ''}
-        </Text>
-
-        <RecordDetailSection title="STUDENT DETAILS">
-          <Card variant="flat" padded={false}>
-            <RecordDetailRow icon="school-outline" label="SCHOOL" value={student.school || 'Not set'} tone="info" divider />
-            <RecordDetailRow icon="layers-outline" label="GRADE LEVEL" value={student.gradeLevel || 'Not set'} tone="neutral" divider />
-            <RecordDetailRow icon="people-outline" label="PARENT OR GUARDIAN" value={student.parentGuardianName || 'Not set'} tone="neutral" divider />
-            <RecordDetailRow icon="call-outline" label="PARENT CONTACT" value={student.parentContact || 'Not set'} tone="success" divider />
-            <RecordDetailRow icon="location-outline" label="TUTORING PLACE" value={student.tutoringPlace || 'Not set'} tone="info" />
-          </Card>
-        </RecordDetailSection>
-
-        {student.notes ? (
-          <RecordDetailSection title="NOTES">
-            <Card variant="flat"><Text token="body">{student.notes}</Text></Card>
-          </RecordDetailSection>
+        {actionsOpen ? (
+          <>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close student actions"
+              onPress={() => setActionsOpen(false)}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: -theme.space[16],
+                right: -theme.space[16],
+                bottom: 0,
+                zIndex: 2,
+              }}
+            />
+            <View
+              style={{
+                position: 'absolute',
+                top: 0,
+                right: 0,
+                width: '82%',
+                maxWidth: 320,
+                zIndex: 3,
+                elevation: 8,
+              }}
+            >
+              <Pressable onPress={(event) => event.stopPropagation()}>
+                <Card
+                  variant="raised"
+                  style={{
+                    paddingVertical: theme.space[4],
+                    borderColor: theme.colors.borderDefault,
+                    shadowColor: theme.colors.shadowBase,
+                    shadowOpacity: 0.2,
+                    shadowRadius: 12,
+                    shadowOffset: { width: 0, height: 5 },
+                  }}
+                >
+                  <ListRow title="Add session" leading={<Ionicons name="calendar-outline" size={20} color={theme.colors.textSecondary} />} onPress={() => { setActionsOpen(false); router.push(`/session-new?studentId=${student.id}` as never); }} />
+                  <ListRow title="Add expense" leading={<Ionicons name="wallet-outline" size={20} color={theme.colors.textSecondary} />} onPress={() => { setActionsOpen(false); router.push({ pathname: '/expense-new', params: { studentId: student.id } } as never); }} />
+                  <ListRow title="Record payment" leading={<Ionicons name="card-outline" size={20} color={theme.colors.textSecondary} />} onPress={() => { setActionsOpen(false); router.push({ pathname: '/payment-new', params: { studentId: student.id } } as never); }} />
+                  <ListRow title="Create statement" leading={<Ionicons name="document-text-outline" size={20} color={theme.colors.textSecondary} />} onPress={() => { setActionsOpen(false); router.push({ pathname: '/statement-new', params: { studentId: student.id } } as never); }} />
+                  <ListRow title="Edit student" leading={<Ionicons name="create-outline" size={20} color={theme.colors.textSecondary} />} onPress={() => { setActionsOpen(false); router.push(`/student-edit?id=${student.id}` as never); }} />
+                </Card>
+              </Pressable>
+            </View>
+          </>
         ) : null}
 
-        <RecordDetailSection title="RECENT SESSIONS">
-          <View style={{ alignItems: 'flex-end', marginBottom: theme.space[4] }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.space[16], paddingVertical: theme.space[8] }}>
+          <View
+            style={{
+              width: 88,
+              height: 88,
+              borderRadius: 44,
+              backgroundColor: theme.colors.primarySubtle,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Avatar {...avatar} size="lg" />
+          </View>
+          <View style={{ flex: 1, gap: theme.space[4] }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.space[8], flexWrap: 'wrap' }}>
+              <Text token="h1">{student.nickname}</Text>
+              <Chip variant="status" tone={STATUS_TONE[student.status]} label={STATUS_LABEL[student.status]} />
+            </View>
+            <Text token="body" color={theme.colors.textSecondary}>
+              {student.gradeLevel || 'Grade not set'}
+              {student.birthday ? `  ·  Age ${ageFromBirthday(student.birthday)}` : ''}
+            </Text>
+            <Text token="body" color={theme.colors.textSecondary} numberOfLines={1}>
+              {student.school || 'School not set'}
+            </Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.space[8], marginTop: theme.space[4] }}>
+              {latestSession?.subject ? <Chip variant="status" tone="info" label={latestSession.subject} /> : null}
+              <Chip variant="status" tone="neutral" label={`${formatPeso(student.defaultRate)}${student.rateType === 'hourly' ? '/hr' : '/session'}`} />
+            </View>
+          </View>
+        </View>
+
+        <InfoCard icon="people-outline" title="Parent contact">
+          <View style={{ gap: theme.space[2] }}>
+            <Text token="bodyStrong">{student.parentGuardianName || 'Parent or guardian not set'}</Text>
+            <Text token="body" color={theme.colors.textSecondary}>{student.parentContact || 'No contact details added'}</Text>
+          </View>
+          {student.parentContact ? (
+            <View style={{ flexDirection: 'row', gap: theme.space[8] }}>
+              <View style={{ flex: 1 }}><Button label="Call" icon="call-outline" variant="secondary" onPress={() => void callParent()} fullWidth /></View>
+              <View style={{ flex: 1 }}><Button label="Copy" icon="copy-outline" variant="secondary" onPress={() => void copyParentContact()} fullWidth /></View>
+            </View>
+          ) : null}
+        </InfoCard>
+
+        <InfoCard icon="school-outline" title="Tutoring information">
+          <View style={{ gap: theme.space[12] }}>
+            <DetailLine label="Subject" value={latestSession?.subject ?? 'Not set'} />
+            <DetailLine label={student.rateType === 'hourly' ? 'Hourly rate' : 'Session rate'} value={`${formatPeso(student.defaultRate)}${student.rateType === 'hourly' ? '/hr' : ''}`} />
+            <DetailLine label="Start date" value={formatDisplayDate(student.createdAt)} />
+            <DetailLine label="Typical schedule" value={typicalSchedule(latestSession)} />
+            <DetailLine label="Tutoring place" value={student.tutoringPlace || 'Not set'} />
+          </View>
+        </InfoCard>
+
+        <InfoCard icon="document-text-outline" title="Notes">
+          <Text token="body" color={student.notes ? theme.colors.textSecondary : theme.colors.textMuted}>
+            {student.notes || 'No notes added yet.'}
+          </Text>
+        </InfoCard>
+
+        <View style={{ gap: theme.space[8] }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Text token="h3">Recent sessions</Text>
             <Button label="View all" size="sm" variant="ghost" onPress={() => router.push(`/sessions?studentId=${student.id}` as never)} />
           </View>
           {recentSessions.length > 0 ? (
@@ -192,9 +425,9 @@ export default function StudentDetailScreen() {
               {recentSessions.map((session, index) => (
                 <ListRow
                   key={session.id}
-                  title={session.subject}
-                  subtitle={formatDisplayDateTime(session.startsAt)}
-                  leading={<Ionicons name="book-outline" size={18} color={theme.colors.primary} />}
+                  title={formatSessionTimingHeading(getSessionTiming(session, now), student.tutoringPlace)}
+                  subtitle={`${session.subject} · ${formatDisplayDateTime(session.startsAt)} · ${formatDisplayTime(session.endsAt)}`}
+                  leading={<Ionicons name={getSessionTiming(session, now).kind === 'overdue' ? 'alert-circle-outline' : 'book-outline'} size={18} color={getSessionTiming(session, now).kind === 'overdue' ? theme.colors.danger : theme.colors.primary} />}
                   trailing={<View style={{ alignItems: 'flex-end', gap: theme.space[4] }}><Text token="caption" tabular>{formatPesoCompact(session.sessionFee)}</Text><SessionStatusChip status={session.status} /></View>}
                   divider={index < recentSessions.length - 1}
                   showChevron
@@ -205,34 +438,45 @@ export default function StudentDetailScreen() {
           ) : (
             <Card variant="flat"><Text token="caption" color={theme.colors.textMuted}>No sessions recorded for this student.</Text></Card>
           )}
-        </RecordDetailSection>
+        </View>
 
-        <Card variant="flat">
+        <Card variant="raised">
           <View style={{ gap: theme.space[12] }}>
             <View style={{ gap: theme.space[4] }}>
               <Text token="h3">Manage student</Text>
-              <Text token="caption" color={theme.colors.textMuted}>Update the profile or change this student’s active status.</Text>
+              <Text token="caption" color={theme.colors.textMuted}>Update the profile or change the student’s record status.</Text>
             </View>
-            <Button label="Edit student" icon="create-outline" variant="secondary" onPress={() => router.push(`/student-edit?id=${student.id}` as never)} fullWidth />
-            {student.status === 'archived' ? (
-              <Button label="Restore student" icon="refresh-outline" loading={busy} onPress={() => void mutate('restore')} fullWidth />
-            ) : (
-              <Button label="Archive student" icon="archive-outline" variant="destructive" loading={busy} onPress={confirmArchive} fullWidth />
-            )}
+
+            <View style={{ gap: theme.space[8], alignSelf: 'stretch', alignItems: 'stretch' }}>
+              <View style={{ alignSelf: 'stretch', alignItems: 'stretch' }}>
+                <Button label="Edit student" icon="create-outline" variant="primary" onPress={() => router.push(`/student-edit?id=${student.id}` as never)} fullWidth />
+              </View>
+              {student.status === 'archived' ? (
+                <View style={{ alignSelf: 'stretch', alignItems: 'stretch' }}>
+                  <Button label="Restore student" icon="refresh-outline" variant="secondary" loading={busy} onPress={() => void mutate('restore')} fullWidth />
+                </View>
+              ) : (
+                <View style={{ alignSelf: 'stretch', alignItems: 'stretch' }}>
+                  <Button label="Archive student" icon="archive-outline" variant="secondary" loading={busy} onPress={confirmArchive} fullWidth />
+                </View>
+              )}
+            </View>
+
+            <View style={{ height: 0.5, backgroundColor: theme.colors.borderSubtle, marginVertical: theme.space[4] }} />
+
+            <View style={{ gap: theme.space[8] }}>
+              <Text token="micro" color={theme.colors.dangerText}>DANGER ZONE</Text>
+              <View style={{ padding: theme.space[12], borderRadius: theme.radius.md, backgroundColor: theme.colors.dangerSubtle, borderWidth: 0.5, borderColor: theme.colors.dangerBorder, gap: theme.space[8] }}>
+                <Text token="caption" color={theme.colors.dangerText}>Permanent deletion cannot be undone. Existing sessions, expenses, payments and statements will be kept.</Text>
+                <View style={{ alignSelf: 'stretch', alignItems: 'stretch' }}>
+                  <Button label="Delete student permanently" icon="trash-outline" variant="destructive" loading={busy} onPress={confirmPermanentDelete} fullWidth />
+                </View>
+              </View>
+            </View>
+
+            <Text token="caption" color={theme.colors.textMuted}>Archive is reversible and keeps the student available in your records.</Text>
           </View>
         </Card>
-
-        <RecordDetailSection title="QUICK ACTIONS">
-          <Card variant="flat">
-            <View style={{ gap: theme.space[12] }}>
-              <Button label="Add session" icon="add" onPress={() => router.push(`/session-new?studentId=${student.id}` as never)} fullWidth />
-              <Button label="Add expense" icon="wallet-outline" variant="secondary" onPress={() => router.push({ pathname: '/expense-new', params: { studentId: student.id } } as never)} fullWidth />
-              <Button label="Record payment" icon="card-outline" variant="secondary" onPress={() => router.push({ pathname: '/payment-new', params: { studentId: student.id } } as never)} fullWidth />
-              <Button label="Create statement" icon="document-text-outline" variant="secondary" onPress={() => router.push({ pathname: '/statement-new', params: { studentId: student.id } } as never)} fullWidth />
-              <Button label="View payments" icon="list-outline" variant="ghost" onPress={() => router.push({ pathname: '/payments', params: { studentId: student.id } } as never)} fullWidth />
-            </View>
-          </Card>
-        </RecordDetailSection>
       </View>
     </Screen>
   );

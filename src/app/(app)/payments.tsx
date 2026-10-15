@@ -1,10 +1,11 @@
+import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, RefreshControl, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Button, Card, Chip, EmptyState, Screen, Text } from '@/components/ui';
-import { RecordListCard, RecordListSummary } from '@/components/RecordList';
+import { Card, Chip, EmptyState, Screen, Text, TopAppBar } from '@/components/ui';
+import { RecordListCard } from '@/components/RecordList';
 import {
   listPayments,
   PAYMENT_PAGE_SIZE,
@@ -40,8 +41,6 @@ export default function PaymentsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [studentNames, setStudentNames] = useState<Record<string, string>>({});
   const [studentName, setStudentName] = useState<string | null>(null);
-  const loadedTotal = items.reduce((sum, item) => sum + item.amount, 0);
-
   const loadFirst = useCallback(async () => {
     if (!profile) return;
     setLoading(true);
@@ -83,27 +82,9 @@ export default function PaymentsScreen() {
     }
   }
 
-  const header = (
-    <View style={{ paddingHorizontal: theme.layout.screenPadding, paddingTop: theme.space[8], gap: theme.space[8] }}>
-      <Text token="h1">{studentName ? `${studentName}'s payments` : 'Payments'}</Text>
-      <Text token="caption" color={theme.colors.textMuted}>Record money received and keep student balances accurate.</Text>
-    </View>
-  );
-
   return (
-    <Screen header={header} padded={false}>
+    <Screen header={<TopAppBar title={studentName ? `${studentName}'s payments` : 'Payments'} />} padded={false}>
       <View style={{ flex: 1 }}>
-        {items.length > 0 ? (
-          <View style={{ paddingHorizontal: theme.layout.screenPadding, paddingTop: theme.space[12], paddingBottom: theme.space[12] }}>
-            <RecordListSummary
-              icon="wallet-outline"
-              label="PAYMENTS LOADED"
-              value={formatPesoCompact(loadedTotal)}
-              description={`${items.length} payment${items.length === 1 ? '' : 's'} in the current history.`}
-            />
-          </View>
-        ) : null}
-
         {error ? <View style={{ paddingHorizontal: theme.layout.screenPadding, paddingBottom: theme.space[12] }}><Card variant="flat"><Text token="caption" color={theme.colors.dangerText}>{error}</Text></Card></View> : null}
         <FlatList
           data={items}
@@ -125,11 +106,41 @@ export default function PaymentsScreen() {
               onPress={() => router.push({ pathname: '/payment-detail', params: { id: item.id } } as never)}
             />
           )}
-          ListEmptyComponent={loading ? <View style={{ paddingTop: theme.space[48], alignItems: 'center' }}><ActivityIndicator color={theme.colors.primary} /></View> : <Card variant="flat"><EmptyState icon="wallet-outline" title="No payments yet" description="Record the first payment to start tracking balances." action={<Button label="Record payment" onPress={() => router.push({ pathname: '/payment-new', params: studentId ? { studentId } : undefined } as never)} />} /></Card>}
+          ListEmptyComponent={loading ? <View style={{ paddingTop: theme.space[48], alignItems: 'center' }}><ActivityIndicator color={theme.colors.primary} /></View> : <Card variant="flat"><EmptyState icon="wallet-outline" title="No payments yet" description="Record the first payment to start tracking balances." /></Card>}
           ListFooterComponent={loadingMore ? <View style={{ paddingVertical: theme.space[16], alignItems: 'center' }}><ActivityIndicator color={theme.colors.primary} /></View> : null}
         />
-        <View style={{ position: 'absolute', left: theme.layout.screenPadding, right: theme.layout.screenPadding, bottom: theme.space[16] + insets.bottom }}>
-          <Button label="Record payment" icon="add" onPress={() => router.push({ pathname: '/payment-new', params: studentId ? { studentId } : undefined } as never)} fullWidth />
+        <View
+          pointerEvents="box-none"
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            bottom: theme.space[16] + insets.bottom,
+            paddingHorizontal: theme.layout.screenPadding,
+            alignItems: 'flex-end',
+          }}
+        >
+          <Pressable
+            onPress={() => router.push({ pathname: '/payment-new', params: studentId ? { studentId } : undefined } as never)}
+            accessibilityRole="button"
+            accessibilityLabel="Record payment"
+            style={({ pressed }) => ({
+              width: 56,
+              height: 56,
+              borderRadius: 28,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: theme.colors.primary,
+              opacity: pressed ? 0.82 : 1,
+              elevation: 4,
+              shadowColor: theme.colors.shadowBase,
+              shadowOpacity: 0.18,
+              shadowRadius: 8,
+              shadowOffset: { width: 0, height: 3 },
+            })}
+          >
+            <Ionicons name="add" size={28} color={theme.colors.textOnPrimary} />
+          </Pressable>
         </View>
       </View>
     </Screen>

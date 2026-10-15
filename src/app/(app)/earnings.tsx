@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
-import { View } from 'react-native';
+import { Pressable, View } from 'react-native';
 
 import {
   Button,
@@ -14,6 +14,7 @@ import {
   Skeleton,
   StatTile,
   Text,
+  TopAppBar,
 } from '@/components/ui';
 import { getEarningsSnapshot, type EarningsSnapshot } from '@/services/earnings.service';
 import { listStudents } from '@/services/students.service';
@@ -70,7 +71,36 @@ export default function EarningsScreen() {
   useEffect(() => { void load(); }, [load]);
 
   return (
-    <Screen scroll>
+    <Screen
+      scroll
+      contentStyle={{ paddingBottom: theme.space[64] + theme.space[32] }}
+      header={<TopAppBar title="Earnings" />}
+      footer={(
+        <View style={{ paddingHorizontal: theme.layout.screenPadding, paddingBottom: theme.space[16], alignItems: 'flex-end' }}>
+          <Pressable
+            onPress={() => router.push('/payment-new' as never)}
+            accessibilityRole="button"
+            accessibilityLabel="Record payment"
+            style={({ pressed }) => ({
+              width: 56,
+              height: 56,
+              borderRadius: 28,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: theme.colors.primary,
+              opacity: pressed ? 0.82 : 1,
+              elevation: 4,
+              shadowColor: theme.colors.shadowBase,
+              shadowOpacity: 0.18,
+              shadowRadius: 8,
+              shadowOffset: { width: 0, height: 3 },
+            })}
+          >
+            <Ionicons name="add" size={28} color={theme.colors.textOnPrimary} />
+          </Pressable>
+        </View>
+      )}
+    >
       <View style={{ paddingTop: theme.space[8], gap: theme.space[24] }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <View style={{ gap: theme.space[4] }}>
@@ -165,7 +195,6 @@ export default function EarningsScreen() {
             </View>
 
             <View style={{ gap: theme.space[12] }}>
-              <Button label="Record payment" icon="add" onPress={() => router.push('/payment-new' as never)} fullWidth />
               <Button label="View payment history" variant="secondary" onPress={() => router.push('/payments' as never)} fullWidth />
             </View>
           </>

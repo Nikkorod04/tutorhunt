@@ -18,7 +18,7 @@ export default function AppLayout() {
   if (status === 'loading') return <AppLoading />;
   if (status === 'unconfigured') return <Redirect href="/setup" />;
   if (status === 'signedOut') return <Redirect href="/login" />;
-  if (status === 'needsRole') return <Redirect href="/role-selection" />;
+  if (status === 'needsProfile') return <Redirect href={'/tutor-onboarding' as never} />;
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
@@ -33,9 +33,6 @@ export default function AppLayout() {
       <Stack.Screen name="recurring-new" />
       <Stack.Screen name="recurring-detail" />
       <Stack.Screen name="recurring-edit" />
-      <Stack.Screen name="parent-request-new" />
-      <Stack.Screen name="parent-request-detail" />
-      <Stack.Screen name="parent-request-edit" />
       <Stack.Screen name="expenses" />
       <Stack.Screen name="expense-new" />
       <Stack.Screen name="expense-detail" />
@@ -48,10 +45,10 @@ export default function AppLayout() {
       <Stack.Screen name="statements" />
       <Stack.Screen name="statement-new" />
       <Stack.Screen name="statement-detail" />
-      <Stack.Screen name="tutor-profile" />
-      <Stack.Screen name="tutor-profile-edit" />
-      <Stack.Screen name="parent-profile-edit" />
       <Stack.Screen name="upgrade" />
+      <Stack.Screen name="notifications" />
+      <Stack.Screen name="announcement-detail" />
+      <Stack.Screen name="settings" />
     </Stack>
   );
 }

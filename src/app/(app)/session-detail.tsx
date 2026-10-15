@@ -1,9 +1,11 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, View } from 'react-native';
 
 import {
   Button,
+  Avatar,
   Card,
   Chip,
   EmptyState,
@@ -11,11 +13,13 @@ import {
   SessionStatusChip,
   Skeleton,
   Text,
+  TopAppBar,
   useToast,
 } from '@/components/ui';
 import { RecordDetailHeader, RecordDetailMetrics, RecordDetailRow, RecordDetailSection } from '@/components/RecordDetail';
-import { deleteSession, getSession, sessionErrorMessage } from '@/services/sessions.service';
+import { deleteSession, getSession, sessionErrorMessage, updateSessionStatus } from '@/services/sessions.service';
 import { getStudent } from '@/services/students.service';
+import { useSubmitGuard } from '@/hooks/useSubmitGuard';
 import { useAuthStore } from '@/stores/authStore';
 import { useSessionStore } from '@/stores/sessionStore';
 import { useTheme } from '@/theme';
@@ -23,18 +27,23 @@ import type { Session, Student } from '@/types';
 import { formatPeso } from '@/utils/currency';
 import { formatDisplayDate, formatDisplayTime } from '@/utils/date';
 import { isChargeable } from '@/utils/pricing';
+import { runAfterNavigation, showToastAfterNavigation } from '@/utils/feedback';
+import { formatSessionTimingHeading, getSessionTiming } from '@/utils/session-presentation';
 
 export default function SessionDetailScreen() {
   const theme = useTheme();
   const params = useLocalSearchParams<{ id?: string | string[] }>();
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const profile = useAuthStore((state) => state.profile);
+  const upsert = useSessionStore((state) => state.upsert);
   const remove = useSessionStore((state) => state.remove);
   const { showToast } = useToast();
+  const { beginSubmit, endSubmit } = useSubmitGuard();
   const [session, setSession] = useState<Session | null>(null);
   const [student, setStudent] = useState<Student | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [now, setNow] = useState(() => new Date());
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -47,16 +56,50 @@ export default function SessionDetailScreen() {
     finally { setLoading(false); }
   }, [profile, id]);
 
-  useEffect(() => { void load(); }, [load]);
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load]),
+  );
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(timer);
+  }, []);
+
+  async function markCompleted() {
+    if (!profile || !session || busy || session.status !== 'scheduled') return;
+    setBusy(true);
+    setError(null);
+    try {
+      await updateSessionStatus(profile.uid, session.id, 'completed');
+      const updated = { ...session, status: 'completed' as const, billable: true, updatedAt: new Date() };
+      setSession(updated);
+      upsert(updated);
+      showToast('Session marked completed', 'success');
+    } catch (caught) {
+      const message = sessionErrorMessage(caught);
+      setError(message);
+      showToast(message, 'danger');
+    } finally {
+      setBusy(false);
+    }
+  }
 
   function confirmDelete() {
     if (!profile || !id) return;
     Alert.alert('Delete this session?', 'This permanently removes the record. This cannot be undone.', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
+        if (!beginSubmit()) return;
         setBusy(true); setError(null);
-        try { await deleteSession(profile.uid, id); remove(id); showToast('Session deleted'); router.replace('/sessions' as never); }
-        catch (caught) { const message = sessionErrorMessage(caught); setError(message); showToast(message, 'danger'); setBusy(false); }
+        let leavingScreen = false;
+        try { await deleteSession(profile.uid, id); leavingScreen = true; }
+        catch (caught) { const message = sessionErrorMessage(caught); setError(message); showToast(message, 'danger'); return; }
+        finally { endSubmit(); if (!leavingScreen) setBusy(false); }
+        router.replace('/sessions' as never);
+        runAfterNavigation(() => remove(id));
+        showToastAfterNavigation(showToast, 'Session deleted');
       } },
     ]);
   }
@@ -84,24 +127,88 @@ export default function SessionDetailScreen() {
   }
 
   const charged = isChargeable(session);
+  const timing = getSessionTiming(session, now);
+  const isOverdue = timing.kind === 'overdue';
+  const isOngoing = timing.kind === 'ongoing';
+  const timingHeading = formatSessionTimingHeading(timing, student?.tutoringPlace);
 
   return (
-    <Screen scroll>
+    <Screen scroll header={<TopAppBar title="Session info" onBack={() => router.back()} />}>
       <View style={{ paddingTop: theme.space[8], gap: theme.space[20] }}>
         <RecordDetailHeader
           eyebrow="SESSION RECORD"
           title={session.subject}
-          subtitle={`${student?.nickname ?? 'Student'} · ${formatDisplayDate(session.startsAt)}`}
+          subtitle={student?.nickname ?? 'Student'}
           icon="calendar-outline"
+          leading={(
+            <Avatar
+              name={student?.nickname}
+              imageUrl={student?.avatarType === 'custom' ? student.customAvatarUrl : null}
+              builtin={student?.avatarType === 'custom' ? 'default' : student?.avatarType}
+              size="md"
+            />
+          )}
           status={<SessionStatusChip status={session.status} />}
           onBack={() => router.back()}
+          showToolbar={false}
         />
 
         {error ? <Card variant="accent"><Text token="caption" color={theme.colors.warningText}>{error}</Text></Card> : null}
 
+        {timing.kind === 'upcoming' || timing.kind === 'ongoing' || timing.kind === 'overdue' ? (
+          <Card
+            variant="raised"
+            style={isOverdue
+              ? { backgroundColor: theme.colors.dangerSubtle, borderColor: theme.colors.dangerBorder }
+              : isOngoing
+                ? { backgroundColor: theme.colors.successSubtle, borderColor: theme.colors.successBorder }
+                : { backgroundColor: theme.colors.primarySubtle, borderColor: theme.colors.primaryBorder }}
+          >
+            <View style={{ gap: theme.space[8] }}>
+              <Text token="h3" color={isOverdue ? theme.colors.dangerText : isOngoing ? theme.colors.successText : theme.colors.primary}>{timingHeading}</Text>
+              <Text token="caption" color={isOverdue ? theme.colors.dangerText : theme.colors.textSecondary}>
+                {isOverdue ? 'Mark it completed or reschedule to keep your records up to date.' : isOngoing ? 'This session is within its scheduled time.' : 'This session is coming up.'}
+              </Text>
+              {isOverdue || isOngoing ? (
+                <View style={{ flexDirection: 'row', gap: theme.space[8], marginTop: theme.space[4] }}>
+                  <View style={{ flex: 1 }}><Button label="Mark completed" loading={busy} onPress={() => void markCompleted()} fullWidth /></View>
+                  <View style={{ flex: 1 }}><Button label="Reschedule" variant="secondary" disabled={busy} onPress={() => router.push({ pathname: '/session-new', params: { rescheduleFrom: session.id, studentId: session.studentId } } as never)} fullWidth /></View>
+                </View>
+              ) : null}
+            </View>
+          </Card>
+        ) : null}
+
+        <RecordDetailSection title="SCHEDULE">
+          <Card variant="raised" style={{ backgroundColor: theme.colors.surface }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.space[12] }}>
+              <View style={{ width: 48, height: 48, borderRadius: theme.radius.md, backgroundColor: theme.colors.infoSubtle, alignItems: 'center', justifyContent: 'center' }}>
+                <Ionicons name="calendar-outline" size={24} color={theme.colors.info} />
+              </View>
+              <View style={{ flex: 1, gap: theme.space[2] }}>
+                <Text token="micro" color={theme.colors.textMuted}>DATE</Text>
+                <Text token="h3">{formatDisplayDate(session.startsAt)}</Text>
+                <Text token="caption" color={theme.colors.textSecondary}>
+                  {formatDisplayTime(session.startsAt)} – {formatDisplayTime(session.endsAt)}
+                </Text>
+                {student?.tutoringPlace ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.space[4], marginTop: theme.space[4] }}>
+                    <Ionicons name="location-outline" size={14} color={theme.colors.textMuted} />
+                    <Text token="caption" color={theme.colors.textMuted} numberOfLines={1}>{student.tutoringPlace}</Text>
+                  </View>
+                ) : null}
+              </View>
+              <View style={{ alignItems: 'flex-end', gap: theme.space[2] }}>
+                <Text token="micro" color={theme.colors.textMuted}>LENGTH</Text>
+                <Text token="bodyStrong" tabular>{`${session.durationMinutes} min`}</Text>
+              </View>
+            </View>
+          </Card>
+        </RecordDetailSection>
+
         <RecordDetailMetrics
           metrics={[
-            { label: 'DURATION', value: `${session.durationMinutes} min` },
+            { label: 'RATE', value: `${formatPeso(session.appliedRate)} ${session.rateType === 'hourly' ? '/ hour' : '/ session'}` },
             { label: charged ? 'AMOUNT CHARGED' : 'SESSION FEE', value: formatPeso(session.sessionFee), tone: charged ? 'success' : undefined },
           ]}
         />
@@ -110,10 +217,8 @@ export default function SessionDetailScreen() {
         <RecordDetailSection title="SESSION DETAILS">
           <Card variant="flat" padded={false}>
             <RecordDetailRow icon="person-outline" label="STUDENT" value={student?.nickname ?? 'Unknown student'} tone="info" divider />
-            <RecordDetailRow icon="calendar-outline" label="DATE" value={formatDisplayDate(session.startsAt)} tone="info" divider />
-            <RecordDetailRow icon="time-outline" label="TIME" value={`${formatDisplayTime(session.startsAt)} – ${formatDisplayTime(session.endsAt)}`} tone="neutral" divider />
-            <RecordDetailRow icon="book-outline" label="TOPIC" value={session.topicDetails || session.topicCategory.replaceAll('_', ' ')} tone="neutral" divider />
-            <RecordDetailRow icon="cash-outline" label="RATE" value={`${formatPeso(session.appliedRate)} ${session.rateType === 'hourly' ? 'per hour' : 'per session'}`} tone="success" />
+            <RecordDetailRow icon="book-outline" label="TOPIC" value={session.topicCategory.replaceAll('_', ' ')} tone="neutral" divider />
+            <RecordDetailRow icon="cash-outline" label="BILLING" value={session.rateType === 'hourly' ? 'Hourly rate' : 'Per-session rate'} tone="success" />
           </Card>
         </RecordDetailSection>
 
@@ -140,14 +245,18 @@ export default function SessionDetailScreen() {
           </Card>
         ) : null}
 
-        <Card variant="flat">
+        <Card variant="raised">
           <View style={{ gap: theme.space[12] }}>
             <View style={{ gap: theme.space[4] }}>
               <Text token="h3">Manage session</Text>
               <Text token="caption" color={theme.colors.textMuted}>Update the record or plan a replacement when needed.</Text>
             </View>
-            {session.status !== 'rescheduled' ? <Button label="Edit session" icon="create-outline" variant="secondary" onPress={() => router.push({ pathname: '/session-edit', params: { id: session.id } } as never)} fullWidth /> : null}
-            {session.status === 'scheduled' ? <Button label="Reschedule" icon="calendar-outline" variant="secondary" onPress={() => router.push({ pathname: '/session-new', params: { rescheduleFrom: session.id, studentId: session.studentId } } as never)} fullWidth /> : null}
+            {session.status !== 'rescheduled' ? (
+              <View style={{ flexDirection: 'row', gap: theme.space[8] }}>
+                <View style={{ flex: 1 }}><Button label="Edit" icon="create-outline" variant="secondary" onPress={() => router.push({ pathname: '/session-edit', params: { id: session.id } } as never)} fullWidth /></View>
+                {session.status === 'scheduled' ? <View style={{ flex: 1 }}><Button label="Reschedule" icon="calendar-outline" variant="secondary" onPress={() => router.push({ pathname: '/session-new', params: { rescheduleFrom: session.id, studentId: session.studentId } } as never)} fullWidth /></View> : null}
+              </View>
+            ) : null}
             <Button label="Delete session" icon="trash-outline" variant="destructive" loading={busy} onPress={confirmDelete} fullWidth />
           </View>
         </Card>

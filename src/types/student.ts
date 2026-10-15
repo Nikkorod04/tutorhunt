@@ -2,17 +2,30 @@
 
 import type { RateType } from './common';
 
-/**
- * Blueprint section 7.8 lists a neutral default alongside boy and girl, but
- * section 10's enum omitted it. Both are honoured here so a tutor can pick a
- * neutral avatar rather than being pushed towards uploading a photo of a child.
- */
-export type AvatarType = 'boy' | 'girl' | 'neutral' | 'custom';
+export type StudentGender = 'male' | 'female';
+export type StudentAvatarId =
+  | 'default'
+  | 'male-01'
+  | 'male-02'
+  | 'male-03'
+  | 'male-04'
+  | 'male-05'
+  | 'female-01'
+  | 'female-02'
+  | 'female-03'
+  | 'female-04'
+  | 'female-05'
+  | 'custom';
+
+/** Legacy values are accepted while older Firestore documents are migrated. */
+export type LegacyAvatarType = 'boy' | 'girl' | 'neutral';
+export type AvatarType = StudentAvatarId | LegacyAvatarType;
 export type StudentStatus = 'active' | 'inactive' | 'archived';
 
 export interface Student {
   id: string;
   nickname: string;
+  gender: StudentGender | null;
   avatarType: AvatarType;
   customAvatarUrl: string | null;
   /** Age is never stored; it is calculated from this at render time. */

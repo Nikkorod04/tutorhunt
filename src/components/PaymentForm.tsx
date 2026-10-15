@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View } from 'react-native';
+import React, { useRef, useState } from 'react';
+import { View, type TextInput } from 'react-native';
 
 import {
   Button,
@@ -56,6 +56,9 @@ export function PaymentForm({
     notes: initial?.notes ?? '',
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const amountRef = useRef<TextInput>(null);
+  const referenceRef = useRef<TextInput>(null);
+  const notesRef = useRef<TextInput>(null);
 
   function update<K extends keyof PaymentFormValues>(key: K, value: PaymentFormValues[K]) {
     setValues((current) => ({ ...current, [key]: value }));
@@ -117,6 +120,9 @@ export function PaymentForm({
             placeholder="500"
             keyboardType="decimal-pad"
             icon="cash-outline"
+            inputRef={amountRef}
+            returnKeyType="next"
+            onSubmitEditing={() => referenceRef.current?.focus()}
             error={errors.amount}
           />
 
@@ -125,6 +131,7 @@ export function PaymentForm({
             value={values.datePaid}
             onChange={(date) => update('datePaid', date)}
             error={errors.datePaid}
+            pickerOnly
           />
 
           <View style={{ gap: theme.space[8] }}>
@@ -153,11 +160,15 @@ export function PaymentForm({
             onChangeText={(value) => update('reference', value)}
             placeholder="Receipt number or transfer reference"
             icon="bookmark-outline"
+            inputRef={referenceRef}
+            returnKeyType="next"
+            onSubmitEditing={() => notesRef.current?.focus()}
             maxLength={LIMITS.paymentReference}
             error={errors.reference}
           />
           <TextField
             label="Notes (optional)"
+            inputRef={notesRef}
             value={values.notes}
             onChangeText={(value) => update('notes', value)}
             placeholder="Anything worth remembering."

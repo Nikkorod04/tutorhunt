@@ -2,15 +2,17 @@ import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, View } from 'react-native';
 
-import { Button, Card, Chip, EmptyState, Screen, Skeleton, Text, useToast } from '@/components/ui';
+import { Button, Card, Chip, EmptyState, Screen, Skeleton, Text, TopAppBar, useToast } from '@/components/ui';
 import { RecordDetailHeader, RecordDetailMetrics, RecordDetailRow, RecordDetailSection } from '@/components/RecordDetail';
 import { deletePayment, getPayment, paymentErrorMessage } from '@/services/payments.service';
 import { getStudent } from '@/services/students.service';
+import { useSubmitGuard } from '@/hooks/useSubmitGuard';
 import { useAuthStore } from '@/stores/authStore';
 import { useTheme } from '@/theme';
 import type { Payment, Student } from '@/types';
 import { formatPeso } from '@/utils/currency';
 import { formatDisplayDate } from '@/utils/date';
+import { showToastAfterNavigation } from '@/utils/feedback';
 
 const METHOD_LABELS: Record<Payment['method'], string> = {
   cash: 'Cash',
@@ -26,6 +28,7 @@ export default function PaymentDetailScreen() {
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const profile = useAuthStore((state) => state.profile);
   const { showToast } = useToast();
+  const { beginSubmit, endSubmit } = useSubmitGuard();
   const [payment, setPayment] = useState<Payment | null>(null);
   const [student, setStudent] = useState<Student | null>(null);
   const [loading, setLoading] = useState(true);
@@ -53,10 +56,14 @@ export default function PaymentDetailScreen() {
         style: 'destructive',
         onPress: () => {
           void (async () => {
+            if (!beginSubmit()) return;
             setBusy(true);
-            try { await deletePayment(profile.uid, id); showToast('Payment deleted'); router.replace('/payments' as never); }
-            catch (caught) { const message = paymentErrorMessage(caught); setError(message); showToast(message, 'danger'); }
-            finally { setBusy(false); }
+            let leavingScreen = false;
+            try { await deletePayment(profile.uid, id); leavingScreen = true; }
+            catch (caught) { const message = paymentErrorMessage(caught); setError(message); showToast(message, 'danger'); return; }
+            finally { endSubmit(); if (!leavingScreen) setBusy(false); }
+            router.replace('/payments' as never);
+            showToastAfterNavigation(showToast, 'Payment deleted');
           })();
         },
       },
@@ -86,7 +93,7 @@ export default function PaymentDetailScreen() {
   }
 
   return (
-    <Screen scroll>
+    <Screen scroll header={<TopAppBar title="Payment info" onBack={() => router.back()} />}>
       <View style={{ paddingTop: theme.space[8], gap: theme.space[20] }}>
         <RecordDetailHeader
           eyebrow="PAYMENT RECORD"
@@ -95,6 +102,7 @@ export default function PaymentDetailScreen() {
           icon="wallet-outline"
           status={<Chip variant="status" tone="success" label={METHOD_LABELS[payment.method]} icon="cash-outline" />}
           onBack={() => router.back()}
+          showToolbar={false}
         />
 
         {error ? <Card variant="accent"><Text token="caption" color={theme.colors.warningText}>{error}</Text></Card> : null}

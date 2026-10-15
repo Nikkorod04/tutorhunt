@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { type ReactNode } from 'react';
-import { Pressable, View } from 'react-native';
+import { View } from 'react-native';
 
-import { Card, Text, type IconName } from '@/components/ui';
+import { Card, Text, TopAppBar, type IconName } from '@/components/ui';
 import { useTheme, type Tone } from '@/theme';
 
 export function RecordDetailHeader({
@@ -12,7 +12,9 @@ export function RecordDetailHeader({
   icon = 'document-text-outline',
   leading,
   status,
+  action,
   onBack,
+  showToolbar = true,
 }: {
   eyebrow: string;
   title: string;
@@ -20,22 +22,15 @@ export function RecordDetailHeader({
   icon?: IconName;
   leading?: ReactNode;
   status?: ReactNode;
+  action?: ReactNode;
   onBack: () => void;
+  showToolbar?: boolean;
 }) {
   const theme = useTheme();
 
   return (
     <View style={{ gap: theme.space[12] }}>
-      <Pressable
-        onPress={onBack}
-        accessibilityRole="button"
-        accessibilityLabel="Go back"
-        hitSlop={8}
-        style={{ flexDirection: 'row', alignItems: 'center', gap: theme.space[8], alignSelf: 'flex-start', minHeight: theme.layout.minTouchTarget }}
-      >
-        <Ionicons name="arrow-back" size={20} color={theme.colors.primary} />
-        <Text token="bodyStrong" color={theme.colors.primary}>Back</Text>
-      </Pressable>
+      {showToolbar ? <TopAppBar title={eyebrow} onBack={onBack} action={action} /> : null}
 
       <Card
         variant="raised"
@@ -64,7 +59,11 @@ export function RecordDetailHeader({
             <Text token="h1" numberOfLines={2}>{title}</Text>
             <Text token="caption" color={theme.colors.textSecondary}>{subtitle}</Text>
           </View>
-          {status}
+          {status ? (
+            <View style={{ alignItems: 'flex-end', gap: theme.space[4] }}>
+              {status}
+            </View>
+          ) : null}
         </View>
       </Card>
     </View>

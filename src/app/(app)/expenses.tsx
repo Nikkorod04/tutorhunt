@@ -1,17 +1,18 @@
+import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, FlatList, RefreshControl, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
-  Button,
   Card,
   Chip,
   EmptyState,
   Screen,
   Text,
+  TopAppBar,
 } from '@/components/ui';
-import { RecordListCard, RecordListSummary } from '@/components/RecordList';
+import { RecordListCard } from '@/components/RecordList';
 import {
   EXPENSE_PAGE_SIZE,
   type ExpensePage,
@@ -51,8 +52,6 @@ export default function ExpensesScreen() {
         ? item.reimbursable
         : !item.reimbursable
   ));
-  const visibleTotal = visibleItems.reduce((sum, item) => sum + expenseTotal(item), 0);
-
   const loadFirst = useCallback(async () => {
     if (!profile) return;
     setLoading(true);
@@ -94,29 +93,9 @@ export default function ExpensesScreen() {
     }
   }
 
-  const header = (
-    <View style={{ paddingHorizontal: theme.layout.screenPadding, paddingTop: theme.space[8], gap: theme.space[8] }}>
-      <Text token="h1">{studentName ? `${studentName}'s expenses` : 'Expenses'}</Text>
-      <Text token="caption" color={theme.colors.textMuted}>
-        Track tutoring costs and reimbursable expenses.
-      </Text>
-    </View>
-  );
-
   return (
-    <Screen header={header} padded={false}>
+    <Screen header={<TopAppBar title={studentName ? `${studentName}'s expenses` : 'Expenses'} />} padded={false}>
       <View style={{ flex: 1 }}>
-        {visibleItems.length > 0 ? (
-          <View style={{ paddingHorizontal: theme.layout.screenPadding, paddingTop: theme.space[12] }}>
-            <RecordListSummary
-              icon="receipt-outline"
-              label="VISIBLE EXPENSES"
-              value={formatPesoCompact(visibleTotal)}
-              description={`${visibleItems.length} loaded expense${visibleItems.length === 1 ? '' : 's'} in the current filter.`}
-            />
-          </View>
-        ) : null}
-
         <View style={{ paddingHorizontal: theme.layout.screenPadding, paddingVertical: theme.space[12] }}>
           <View style={{ flexDirection: 'row', gap: theme.space[8] }}>
             <Chip label="All" selected={filter === 'all'} onPress={() => setFilter('all')} />
@@ -152,12 +131,42 @@ export default function ExpensesScreen() {
               onPress={() => router.push({ pathname: '/expense-detail', params: { id: item.id } } as never)}
             />
           )}
-          ListEmptyComponent={loading ? <View style={{ paddingTop: theme.space[48], alignItems: 'center' }}><ActivityIndicator color={theme.colors.primary} /></View> : <Card variant="flat"><EmptyState icon="receipt-outline" title="No expenses yet" description="Record transport, materials, printing and other tutoring costs." action={<Button label="Add expense" onPress={() => router.push({ pathname: '/expense-new', params: studentId ? { studentId } : undefined } as never)} />} /></Card>}
+          ListEmptyComponent={loading ? <View style={{ paddingTop: theme.space[48], alignItems: 'center' }}><ActivityIndicator color={theme.colors.primary} /></View> : <Card variant="flat"><EmptyState icon="receipt-outline" title="No expenses yet" description="Record transport, materials, printing and other tutoring costs." /></Card>}
           ListFooterComponent={loadingMore ? <View style={{ paddingVertical: theme.space[16], alignItems: 'center' }}><ActivityIndicator color={theme.colors.primary} /></View> : null}
         />
 
-        <View style={{ position: 'absolute', left: theme.layout.screenPadding, right: theme.layout.screenPadding, bottom: theme.space[16] + insets.bottom }}>
-          <Button label="Add expense" icon="add" onPress={() => router.push({ pathname: '/expense-new', params: studentId ? { studentId } : undefined } as never)} fullWidth />
+        <View
+          pointerEvents="box-none"
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            bottom: theme.space[16] + insets.bottom,
+            paddingHorizontal: theme.layout.screenPadding,
+            alignItems: 'flex-end',
+          }}
+        >
+          <Pressable
+            onPress={() => router.push({ pathname: '/expense-new', params: studentId ? { studentId } : undefined } as never)}
+            accessibilityRole="button"
+            accessibilityLabel="Add expense"
+            style={({ pressed }) => ({
+              width: 56,
+              height: 56,
+              borderRadius: 28,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: theme.colors.primary,
+              opacity: pressed ? 0.82 : 1,
+              elevation: 4,
+              shadowColor: theme.colors.shadowBase,
+              shadowOpacity: 0.18,
+              shadowRadius: 8,
+              shadowOffset: { width: 0, height: 3 },
+            })}
+          >
+            <Ionicons name="add" size={28} color={theme.colors.textOnPrimary} />
+          </Pressable>
         </View>
       </View>
     </Screen>

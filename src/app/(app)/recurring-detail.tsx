@@ -2,9 +2,10 @@ import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, View } from 'react-native';
 
-import { Badge, Button, Card, Chip, DateField, EmptyState, Screen, Skeleton, Text, useToast } from '@/components/ui';
+import { Badge, Button, Card, Chip, DateField, EmptyState, Screen, Skeleton, Text, TopAppBar, useToast } from '@/components/ui';
 import { RecordDetailHeader, RecordDetailMetrics, RecordDetailRow, RecordDetailSection } from '@/components/RecordDetail';
 import { activePlanFor } from '@/constants/plans';
+import { useSubmitGuard } from '@/hooks/useSubmitGuard';
 import { cancelRecurringSeries, extendRecurringSeries, getRecurringSeries, recurringErrorMessage } from '@/services/recurring.service';
 import { listStudents } from '@/services/students.service';
 import { useAuthStore } from '@/stores/authStore';
@@ -34,6 +35,7 @@ export default function RecurringDetailScreen() {
   const entitlement = useAuthStore((state) => state.entitlement);
   const plan = activePlanFor(entitlement);
   const { showToast } = useToast();
+  const { beginSubmit, endSubmit } = useSubmitGuard();
   const [series, setSeries] = useState<RecurringSeries | null>(null);
   const [student, setStudent] = useState<Student | null>(null);
   const [loading, setLoading] = useState(true);
@@ -74,6 +76,7 @@ export default function RecurringDetailScreen() {
         text: 'Cancel series',
         style: 'destructive',
         onPress: async () => {
+          if (!beginSubmit()) return;
           setBusy(true);
           try {
             await cancelRecurringSeries(profile.uid, plan, id);
@@ -84,6 +87,7 @@ export default function RecurringDetailScreen() {
             setError(message);
             showToast(message, 'danger');
           } finally {
+            endSubmit();
             setBusy(false);
           }
         },
@@ -92,7 +96,7 @@ export default function RecurringDetailScreen() {
   }
 
   async function extend() {
-    if (!profile || !id || !extendDate || !series) return;
+    if (!profile || !id || !extendDate || !series || !beginSubmit()) return;
     setBusy(true);
     setError(null);
     try {
@@ -104,6 +108,7 @@ export default function RecurringDetailScreen() {
       setError(message);
       showToast(message, 'danger');
     } finally {
+      endSubmit();
       setBusy(false);
     }
   }
@@ -133,7 +138,7 @@ export default function RecurringDetailScreen() {
   const isActive = series.status === 'active';
 
   return (
-    <Screen scroll>
+    <Screen scroll header={<TopAppBar title="Recurring series" onBack={() => router.back()} />}>
       <View style={{ paddingTop: theme.space[8], gap: theme.space[20] }}>
         <RecordDetailHeader
           eyebrow="RECURRING SERIES"
@@ -142,6 +147,7 @@ export default function RecurringDetailScreen() {
           icon="repeat-outline"
           status={<Badge label={statusLabel(series.status)} tone={statusTone(series.status)} />}
           onBack={() => router.back()}
+          showToolbar={false}
         />
 
         {error ? <Card variant="accent"><Text token="caption" color={theme.colors.warningText}>{error}</Text></Card> : null}
@@ -188,7 +194,7 @@ export default function RecurringDetailScreen() {
                   <Text token="h3">Add future dates</Text>
                   <Text token="caption" color={theme.colors.textMuted}>Only new dates are generated; existing sessions are never duplicated.</Text>
                 </View>
-                <DateField label="New last session" value={extendDate} onChange={setExtendDate} />
+                <DateField label="New last session" value={extendDate} onChange={setExtendDate} pickerOnly />
                 <Button label="Extend series" icon="arrow-forward-outline" variant="secondary" loading={busy} onPress={extend} fullWidth />
               </View>
             </Card>

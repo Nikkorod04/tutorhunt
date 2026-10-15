@@ -9,13 +9,14 @@ import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
 
-import { Card, EmptyState, Screen, Skeleton, Text, useToast } from '@/components/ui';
-import { FormHeader } from '@/components/FormHeader';
+import { Card, EmptyState, Screen, Skeleton, Text, TopAppBar, useToast } from '@/components/ui';
 import { StudentForm } from '@/components/StudentForm';
+import { useSubmitGuard } from '@/hooks/useSubmitGuard';
 import { getStudent, studentErrorMessage, updateStudent, type StudentInput } from '@/services/students.service';
 import { useAuthStore } from '@/stores/authStore';
 import { useStudentStore } from '@/stores/studentStore';
 import { useTheme } from '@/theme';
+import { runAfterNavigation, showToastAfterNavigation } from '@/utils/feedback';
 import type { Student } from '@/types';
 
 export default function EditStudentScreen() {
@@ -24,6 +25,7 @@ export default function EditStudentScreen() {
   const profile = useAuthStore((state) => state.profile);
   const upsert = useStudentStore((state) => state.upsert);
   const { showToast } = useToast();
+  const { beginSubmit, endSubmit } = useSubmitGuard();
 
   const [student, setStudent] = useState<Student | null>(null);
   const [loading, setLoading] = useState(true);
@@ -55,26 +57,40 @@ export default function EditStudentScreen() {
   }, [profile, id]);
 
   async function handleSubmit(input: StudentInput) {
-    if (!profile || !id) return;
+    if (!profile || !id || !beginSubmit()) return;
 
     setBusy(true);
     setError(null);
+    let savedStudent: Student | null = null;
+    let leavingScreen = false;
     try {
       const customAvatarUrl = await updateStudent(profile.uid, id, input);
       const { customAvatarLocalUri: _uri, customAvatarMimeType: _mime, ...persisted } = input;
       const updated = { ...persisted, customAvatarUrl };
-      upsert({ ...updated, id, status: student?.status ?? 'active', createdAt: student?.createdAt ?? new Date(), updatedAt: new Date() });
-      setStudent((current) => (current ? { ...current, ...updated } : current));
+      savedStudent = {
+        ...updated,
+        id,
+        status: student?.status ?? 'active',
+        createdAt: student?.createdAt ?? new Date(),
+        updatedAt: new Date(),
+      };
+      leavingScreen = true;
       setError(null);
-      showToast('Student updated successfully');
-      router.back();
     } catch (caught) {
       const message = studentErrorMessage(caught);
       setError(message);
       showToast(message, 'danger');
+      return;
     } finally {
-      setBusy(false);
+      endSubmit();
+      if (!leavingScreen) setBusy(false);
     }
+
+    if (!savedStudent) return;
+    const studentToCache = savedStudent;
+    router.back();
+    runAfterNavigation(() => upsert(studentToCache));
+    showToastAfterNavigation(showToast, 'Student updated successfully');
   }
 
   if (loading) {
@@ -102,10 +118,8 @@ export default function EditStudentScreen() {
   }
 
   return (
-    <Screen scroll>
+    <Screen scroll header={<TopAppBar title={`Edit ${student.nickname}`} onBack={() => router.back()} />}>
       <View style={{ paddingTop: theme.space[8], gap: theme.space[16] }}>
-        <FormHeader eyebrow="STUDENT RECORD" title={`Edit ${student.nickname}`} description="Update the information used for tutoring sessions and statements." icon="create-outline" />
-
         {error ? (
           <Card variant="flat">
             <Text token="caption" color={theme.colors.dangerText}>
